@@ -1,4 +1,4 @@
-"""Big Data Analytics — tujuh aktivitas Recommendation System (materi dosen)."""
+"""Big Data Analytics — tujuh aktivitas Recommendation System."""
 from __future__ import annotations
 
 from io import BytesIO
@@ -19,48 +19,202 @@ from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 
-st.set_page_config(page_title="Recommendation System | Big Data Analytics", page_icon="🧠", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="RECOMSYS | Big Data Analytics",
+    page_icon=":material/psychology:",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 
-st.markdown("""
+# Semua elemen visual memakai palet Light Analytics. Pengaturan warna widget
+# mengikuti .streamlit/config.toml yang disertakan bersama app.py.
+st.markdown('''
 <style>
-.block-container {padding-top: 1.4rem; padding-bottom: 3rem; max-width: 1440px}
-[data-testid="stSidebar"] {background: #101a2d}
-[data-testid="stSidebar"] .stRadio label {padding: .17rem .1rem}
-h1,h2,h3 {letter-spacing:-.035em}
-.hero {background:linear-gradient(115deg,#1B2B53,#152B39 75%); padding:26px 30px; border:1px solid #354567; border-radius:18px; margin-bottom:20px}
-.hero h1 {font-size:2.0rem; margin:0 0 8px 0;color:#F3F7FF}
-.hero p {color:#CFDBEF; margin:0; font-size:.98rem}
-.eyebrow {color:#A7C6FF; font-size:12px; font-weight:700; letter-spacing:.11em;margin-bottom:9px}
-.note {padding:12px 16px; background:#17243A; border-left:3px solid #7C9AFF; border-radius:8px; margin:14px 0; color:#CDD9ED}
-.smallcap {color:#A4B7D7;font-size:13px}
+:root { --page:#F4F7FB; --paper:#FFFFFF; --navy:#172B4D; --ink:#334155;
+        --muted:#64748B; --line:#E2E8F0; --blue:#2563EB; --softblue:#EAF1FF; }
+html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"] {
+    background-color:var(--page); color:var(--ink);
+}
+[data-testid="stHeader"] { background:rgba(244,247,251,.96); }
+.block-container {padding-top:1.5rem; padding-bottom:4rem; max-width:1360px;}
+[data-testid="stSidebar"] {
+    background:#FFFFFF; border-right:1px solid var(--line);
+    min-width:288px; max-width:315px;
+}
+[data-testid="stSidebar"] > div:first-child { background:#FFFFFF; }
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap:.28rem; }
+[data-testid="stSidebar"] .stButton { margin:.05rem 0; }
+[data-testid="stSidebar"] .stButton > button {
+    width:100%; display:flex; justify-content:flex-start; align-items:center;
+    text-align:left; border:1px solid transparent; border-radius:10px;
+    background:transparent; color:#475569; font-size:.86rem;
+    font-weight:500; padding:.61rem .8rem; min-height:41px;
+    transition:background .16s ease,border-color .16s ease,color .16s ease;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+    background:#F3F7FD; border-color:#E3EAF6; color:#1D4ED8;
+}
+[data-testid="stSidebar"] .stButton > button:focus:not(:active) { color:#1D4ED8; }
+[data-testid="stSidebar"] .stButton > button p { font-size:.86rem; }
+.side-brand {display:flex; align-items:center; gap:11px; padding:9px 2px 17px;}
+.brand-icon {width:42px; height:42px; background:#EAF1FF; border-radius:12px;
+    display:flex; align-items:center;justify-content:center;flex-shrink:0;}
+.brand-title {color:#152A49; font-size:15px; font-weight:750; line-height:1.25;}
+.brand-caption {color:#7A8AA2; font-size:11px; margin-top:3px;}
+.side-section {color:#8392AA; font-size:10px; letter-spacing:.095em;
+    font-weight:800; margin:14px 0 7px 6px;}
+.side-rule {height:1px; background:#E7EDF4; margin:4px 0 9px;}
+.side-footer {border-top:1px solid #E5EBF3; margin-top:20px; padding-top:16px;
+    display:flex; align-items:center; gap:10px; color:#62748F; font-size:11px;}
+.side-footer strong {color:#34445C; font-size:12px;}
+h1,h2,h3,h4 {color:#172B4D;letter-spacing:-.028em;}
+h2 {margin-top:.6rem;}
+.hero {background:linear-gradient(116deg, #FFFFFF 0%,#FFFFFF 72%,#EEF5FF 100%);
+    padding:27px 30px; border:1px solid #E2E8F0; border-radius:18px;
+    margin-bottom:20px; box-shadow:0 5px 20px rgba(29,55,94,.035);}
+.hero h1 {font-size:2.05rem; margin:0 0 9px;color:#172B4D;line-height:1.18;}
+.hero p {color:#64748B; margin:0; font-size:.97rem; line-height:1.65; max-width:840px;}
+.eyebrow {color:#2563EB; font-size:11px; font-weight:800;
+    letter-spacing:.095em; margin-bottom:12px;}
+.note {padding:14px 17px; background:#EEF5FF; border-left:3px solid #2563EB;
+    border-radius:9px; margin:17px 0; color:#334155; line-height:1.65;font-size:.9rem;}
+.smallcap {color:#7C8BA4;font-size:12px;}
+/* Kartu angka, tab, panel, tabel, dan formulir */
+[data-testid="stMetric"] {background:#FFF;border:1px solid #E2E8F0;
+    border-radius:14px; padding:16px 18px; box-shadow:0 5px 14px rgba(25,49,89,.025);}
+[data-testid="stMetricLabel"] {color:#64748B;}
+[data-testid="stMetricValue"] {color:#172B4D; font-weight:730;}
+[data-testid="stVerticalBlockBorderWrapper"] {background:#FFFFFF; border-color:#E2E8F0; border-radius:16px;}
+[data-testid="stTabs"] [data-baseweb="tab-list"] {gap:9px;}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    border-radius:9px 9px 0 0; font-weight:550; color:#64748B;
+}
+[data-testid="stTabs"] [aria-selected="true"] {color:#1D4ED8;}
+[data-testid="stFileUploader"] {border-radius:13px;}
+[data-testid="stDataFrame"] {border-radius:12px;overflow:hidden;}
+[data-testid="stForm"] {background:#FFF;border:1px solid #E2E8F0;
+    border-radius:15px; padding:17px;}
+.stDownloadButton button {border:1px solid #C7D8FB; background:#EFF5FF;
+    color:#1D4ED8; border-radius:10px; font-weight:650;}
+.stDownloadButton button:hover {background:#E3EEFF;color:#1D4ED8;}
+.stButton button[kind="primary"], .stFormSubmitButton button[kind="primary"] {
+    background:#2563EB; border-color:#2563EB; color:#FFF; border-radius:10px;
+}
+.stButton button[kind="primary"]:hover, .stFormSubmitButton button[kind="primary"]:hover {
+    background:#1D4ED8; border-color:#1D4ED8;
+}
+/* Overview */
+.section-head {margin:24px 0 16px;}
+.section-kicker {font-size:11px;color:#2563EB;font-weight:800;letter-spacing:.10em;}
+.section-title {font-size:1.43rem;color:#172B4D;font-weight:760;letter-spacing:-.03em;margin:5px 0;}
+.section-desc {font-size:.89rem;line-height:1.6;color:#64748B;}
+.module-top {display:flex;justify-content:space-between;align-items:center;margin:3px 0 16px;}
+.module-icon {width:44px;height:44px;border-radius:12px;display:flex;
+    align-items:center;justify-content:center;font-size:22px;}
+.module-index {font-size:10px;color:#9AA8B9;font-weight:750;letter-spacing:.06em;}
+.module-title {font-size:1.12rem;font-weight:760;color:#172B4D;margin-bottom:9px;}
+.module-desc {font-size:.9rem;line-height:1.65;color:#64748B;min-height:93px;}
+.module-divider {height:1px;background:#E7ECF4;margin:15px 0;}
+.module-label {font-size:.78rem;font-weight:750;color:#334155;margin-bottom:8px;}
+.module-study {color:#475569;font-size:.83rem;line-height:1.7;min-height:56px;}
+.module-outcome {border-radius:10px;padding:12px 13px;margin:13px 0 9px;}
+.module-outcome-label {font-size:10px;color:#64748B;font-weight:750;letter-spacing:.045em;}
+.module-outcome-text {font-size:.85rem;font-weight:750;margin-top:4px;}
+.module-foot {color:#7C8BA4;font-size:.76rem;padding-bottom:8px;}
+.workflow-card {background:#FFF; border:1px solid #E2E8F0; border-radius:15px;
+    padding:20px;margin:12px 0 18px;}
+.workflow-title {color:#172B4D;font-size:1rem;font-weight:750;margin-bottom:13px;}
+.workflow-line {display:flex;flex-wrap:wrap;gap:9px;align-items:center;}
+.workflow-step {background:#EFF5FF;border:1px solid #DBE9FF;border-radius:9px;
+    color:#1D4ED8;font-weight:650;font-size:.81rem;padding:10px 12px;}
+.workflow-arrow {color:#9FB0CA;font-weight:800;}
+@media(max-width:950px) {
+    .hero{padding:20px 22px;}.hero h1{font-size:1.7rem;}
+    .module-desc{min-height:0;}.module-study{min-height:0;}
+    .workflow-arrow {display:none;}
+}
 </style>
-""", unsafe_allow_html=True)
+''', unsafe_allow_html=True)
 
 NAV = [
-    "🏠  Overview",
-    "🛒  1. Apriori",
-    "🧺  2. Market Basket Analysis",
-    "🎬  3. Content-Based (Contoh)",
-    "🎞️  4. Movie Recommendation",
-    "👥  5. User-Based Collaborative",
-    "📚  6. Item-Based Collaborative",
-    "🧩  7. Hybrid Recommendation",
+    "Overview",
+    "Apriori Analysis",
+    "Market Basket Analysis",
+    "Content-Based Recommendation",
+    "Movie Recommendation",
+    "User-Based Collaborative Filtering",
+    "Item-Based Collaborative Filtering",
+    "Hybrid Recommendation",
+]
+NAV_KEYS = ["overview", "apriori", "market", "content", "movie", "user", "item", "hybrid"]
+NAV_ICONS = [
+    ":material/dashboard:", ":material/shopping_cart:",
+    ":material/shopping_basket:", ":material/description:",
+    ":material/movie:", ":material/groups:",
+    ":material/menu_book:", ":material/call_merge:",
+]
+NAV_GROUPS = [
+    ("WORKSPACE", [0]),
+    ("01 / ASSOCIATION RULES", [1, 2]),
+    ("02 / CONTENT-BASED FILTERING", [3, 4]),
+    ("03 / COLLABORATIVE FILTERING", [5, 6]),
+    ("04 / HYBRID SYSTEM", [7]),
 ]
 
+def select_nav(index):
+    st.session_state["active_page"] = NAV[int(index)]
+
+if st.session_state.get("active_page") not in NAV:
+    st.session_state["active_page"] = NAV[0]
+
 with st.sidebar:
-    st.markdown("### 🧠 Big Data Analytics")
-    st.caption("RECOMMENDATION SYSTEM · WEEK 7")
-    st.divider()
-    page = st.radio("Pilih aktivitas", NAV, label_visibility="collapsed")
-    st.divider()
-    st.caption("**Sumber:** notebook dan dataset praktik dosen. Bukan dataset contoh Kaggle pengganti.")
-    st.caption("**Platform:** Streamlit · GitHub · Python 3.12")
+    st.markdown('''
+    <div class="side-brand">
+      <div class="brand-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="5" y="5" width="18" height="18" rx="6" stroke="#2563EB" stroke-width="1.8"/>
+          <circle cx="10" cy="11" r="2" fill="#2563EB"/>
+          <circle cx="18" cy="10" r="2" fill="#2563EB"/>
+          <circle cx="16" cy="18" r="2" fill="#2563EB"/>
+          <path d="M11.8 11L16.2 10.2M11.3 12.7L15 16.4M17.9 12L16.6 16" stroke="#2563EB" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div><div class="brand-title">Big Data Analytics</div>
+      <div class="brand-caption">Created by Kelompok 2</div></div>
+    </div><div class="side-rule"></div>''', unsafe_allow_html=True)
+    for group_label, positions in NAV_GROUPS:
+        st.markdown(f'<div class="side-section">{group_label}</div>', unsafe_allow_html=True)
+        for i in positions:
+            st.button(
+                NAV[i], key="nav_" + NAV_KEYS[i],
+                icon=NAV_ICONS[i], use_container_width=True,
+                on_click=select_nav, args=(i,),
+            )
+    st.markdown('''<div class="side-footer">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m2 10 10-5 10 5-10 5z"/><path d="M6 12v5c3.6 2.6 8.4 2.6 12 0v-5"/><path d="M22 10v6"/>
+      </svg>
+      <div><strong>MMT ITS</strong><div>Academic Dashboard · 2026</div></div>
+    </div>''', unsafe_allow_html=True)
+    # Tandai item aktif tanpa menggunakan radio button atau navigasi JavaScript.
+    selected_key = NAV_KEYS[NAV.index(st.session_state["active_page"])]
+    st.markdown(f'''<style>
+    [data-testid="stSidebar"] .st-key-nav_{selected_key} button {{
+        background:#EAF1FF !important;color:#1D4ED8 !important;
+        border:1px solid #D9E7FF !important;font-weight:700 !important;
+        box-shadow:inset 3px 0 0 #2563EB;
+    }}
+    [data-testid="stSidebar"] .st-key-nav_{selected_key} button p {{color:#1D4ED8 !important;font-weight:700 !important;}}
+    </style>''', unsafe_allow_html=True)
+
+page = st.session_state["active_page"]
 
 
 def hero(tag, title, detail):
-    st.markdown(f'<div class="hero"><div class="eyebrow">{tag}</div><h1>{title}</h1><p>{detail}</p></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hero"><div class="eyebrow">{tag}</div>'
+                f'<h1>{title}</h1><p>{detail}</p></div>', unsafe_allow_html=True)
 
 
 def note(message):
@@ -75,13 +229,22 @@ def metrics(entries):
 
 def show_table(df, filename="hasil_analisis.csv", height=320):
     st.dataframe(df, use_container_width=True, height=height, hide_index=True)
-    st.download_button("⬇️ Unduh hasil CSV", df.to_csv(index=False).encode("utf-8-sig"), file_name=filename, mime="text/csv")
+    st.download_button("Unduh hasil CSV", df.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=filename, mime="text/csv", icon=":material/download:")
 
 
 def chart_layout(fig, height=380):
-    fig.update_layout(template="plotly_dark", height=height, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=15,r=15,t=40,b=25), font=dict(color="#DCE7F6"))
+    fig.update_layout(
+        template="plotly_white", height=height,
+        paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
+        margin=dict(l=15, r=15, t=45, b=25),
+        font=dict(color="#334155", size=12),
+        colorway=["#2563EB", "#7C3AED", "#059669", "#EA580C"],
+        title_font=dict(color="#172B4D", size=15),
+        xaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6"),
+        yaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6"),
+    )
     st.plotly_chart(fig, use_container_width=True)
-
 
 @st.cache_data(show_spinner=False)
 def groceries_raw():
@@ -214,38 +377,121 @@ def prep_books():
 
 
 def render_overview():
-    hero('DASHBOARD AKADEMIK · MMT ITS', 'Recommendation System', 'Satu dashboard interaktif untuk tujuh aktivitas praktik, empat pendekatan rekomendasi, dan dataset yang disediakan dosen.')
-    metrics([('Materi utama','4'),('Aktivitas','7'),('Halaman','8'),('Sumber praktik','Dosen')])
-    st.subheader('Peta pembelajaran')
-    modules=[
-        ('01–02','Association Rule Mining','Apriori dan Market Basket Analysis','Frequent itemsets · Support · Confidence · Lift'),
-        ('03–04','Content-Based Filtering','Konten contoh dan MovieLens','TF-IDF · Cosine similarity · Rekomendasi film'),
-        ('05–06','Collaborative Filtering','Rating pengguna dan Book-Crossing','User similarity · Item-based kNN'),
-        ('07','Hybrid Recommendation','Konten + preferensi pengguna','Skor CB · Skor CF · Pembobotan')]
-    for n,title,subtitle,detail in modules:
-        with st.container(border=True):
-            a,b=st.columns([1,5])
-            a.markdown(f'### {n}')
-            b.markdown(f'**{title}** — {subtitle}  \n<span class="smallcap">{detail}</span>',unsafe_allow_html=True)
-    st.subheader('Dataset sumber')
-    groceries=groceries_raw()
-    movies=movies_raw()
-    books=book_interactions()
-    dataset_info=pd.DataFrame([
-        ['Apriori contoh','Didefinisikan di notebook',5,'Transaksi sederhana'],
-        ['Groceries','data_groceries.csv',len(groceries),'Baris transaksi'],
-        ['MovieLens','movie.csv',len(movies),'Film'],
-        ['MovieLens rating','rating.csv',len(ratings_raw()),'Rating (data tambahan dalam ZIP)'],
-        ['Book-Crossing — setelah filter','BX-Users (1).zip',len(books),'Interaksi rating terpilih'],
-        ['User-Based / Hybrid','Didefinisikan di notebook',len(EXAMPLE_RATINGS),'Baris rating contoh'],
-    ],columns=['Dataset','Sumber','Jumlah baris','Keterangan'])
-    st.dataframe(dataset_info,hide_index=True,use_container_width=True)
-    note('Data <b>music.csv</b> dan <b>Online Retail.xlsx</b> disertakan dosen, tetapi tidak dipanggil oleh tujuh script praktik yang menjadi dasar dashboard ini. Keduanya tidak otomatis dimasukkan sebagai aktivitas baru.')
-    st.caption('Gunakan menu sebelah kiri untuk menjalankan metode. Tidak semua metode memerlukan pembagian data training/testing.')
+    hero(
+        "BIG DATA ANALYTICS · MMT ITS", "Recommendation System",
+        "Platform pembelajaran interaktif untuk memahami dan mengeksplorasi berbagai metode "
+        "Recommendation System berdasarkan materi Big Data Analytics."
+    )
+    metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
+    st.markdown('''<div class="section-head">
+      <div class="section-kicker">EXPLORE OUR MODULES</div>
+      <div class="section-title">Learning Modules</div>
+      <div class="section-desc">Empat pendekatan utama untuk memahami cara kerja sistem rekomendasi.
+      Setiap modul menjelaskan tujuan pembelajaran, konsep yang digunakan, dan keluaran analisis.</div>
+    </div>''', unsafe_allow_html=True)
 
+    modules = [
+        dict(
+            no="01", name="Association Rule Mining", mark="◆", color="#2563EB", bg="#EAF1FF",
+            outcome_bg="#EFF5FF", desc="Mempelajari cara menemukan keterkaitan antarbarang "
+            "dari riwayat transaksi, termasuk barang yang sering dibeli bersamaan.",
+            lessons="Apriori, frequent itemsets, support, confidence, dan lift.",
+            outcome="Pola pembelian dan aturan asosiasi", foot="2 aktivitas · Apriori & Market Basket",
+            actions=[(1,"Buka Apriori"),(2,"Buka Market Basket")],
+        ),
+        dict(
+            no="02", name="Content-Based Filtering", mark="▣", color="#7C3AED", bg="#F1ECFF",
+            outcome_bg="#F7F3FF", desc="Mempelajari bagaimana kesamaan isi dan karakteristik "
+            "item digunakan untuk merekomendasikan film yang memiliki ciri serupa.",
+            lessons="TF-IDF, cosine similarity, dan pemeringkatan kemiripan konten.",
+            outcome="Daftar rekomendasi film serupa", foot="2 aktivitas · Content-Based & Movie",
+            actions=[(3,"Buka Content-Based"),(4,"Buka Movie")],
+        ),
+        dict(
+            no="03", name="Collaborative Filtering", mark="◉", color="#059669", bg="#E7F8F0",
+            outcome_bg="#EEFAF4", desc="Mempelajari rekomendasi berdasarkan kesamaan "
+            "preferensi pengguna dan pola penilaian antaritem.",
+            lessons="User-Based Filtering serta Item-Based Filtering dengan kNN.",
+            outcome="Rekomendasi dari pola rating", foot="2 aktivitas · User-Based & Item-Based",
+            actions=[(5,"Buka User-Based"),(6,"Buka Item-Based")],
+        ),
+        dict(
+            no="04", name="Hybrid Recommendation", mark="◇", color="#EA580C", bg="#FFF0E5",
+            outcome_bg="#FFF7ED", desc="Mempelajari penggabungan rekomendasi "
+            "berbasis kesamaan konten dan preferensi pengguna agar keputusan memanfaatkan beberapa sumber informasi.",
+            lessons="Kombinasi skor Content-Based dan Collaborative, normalisasi, serta pembobotan.",
+            outcome="Rekomendasi gabungan dan pemeringkatan", foot="1 aktivitas · Hybrid Recommendation",
+            actions=[(7,"Buka Hybrid Recommendation")],
+        ),
+    ]
+
+    for start in range(0, len(modules), 2):
+        columns = st.columns(2, gap="medium")
+        for col, module in zip(columns, modules[start:start+2]):
+            with col:
+                with st.container(border=True):
+                    st.markdown(f'''
+                    <div class="module-top">
+                      <div class="module-icon" style="background:{module['bg']};color:{module['color']}">{module['mark']}</div>
+                      <div class="module-index">MODULE {module['no']} / 04</div>
+                    </div>
+                    <div class="module-title">{module['name']}</div>
+                    <div class="module-desc">{module['desc']}</div>
+                    <div class="module-divider"></div>
+                    <div class="module-label">Yang dipelajari</div>
+                    <div class="module-study">{module['lessons']}</div>
+                    <div class="module-outcome" style="background:{module['outcome_bg']}">
+                      <div class="module-outcome-label">HASIL ANALISIS</div>
+                      <div class="module-outcome-text" style="color:{module['color']}">{module['outcome']}</div>
+                    </div>
+                    <div class="module-foot">{module['foot']}</div>
+                    ''', unsafe_allow_html=True)
+                    actions = st.columns(len(module["actions"]))
+                    for button_col, (idx, name) in zip(actions, module["actions"]):
+                        with button_col:
+                            st.button(name, key=f"overview_{idx}", icon=":material/arrow_forward:",
+                                      use_container_width=True, on_click=select_nav, args=(idx,))
+
+    st.markdown('''<div class="section-head">
+      <div class="section-kicker">FROM DATA TO INSIGHT</div>
+      <div class="section-title">How Recommendation Systems Work</div>
+      <div class="section-desc">Tahapan umum analisis. Penerapannya menyesuaikan metode dan karakteristik dataset.</div>
+    </div>
+    <div class="workflow-card">
+      <div class="workflow-title">Alur Pembelajaran dan Analisis</div>
+      <div class="workflow-line">
+        <span class="workflow-step">Dataset</span><span class="workflow-arrow">→</span>
+        <span class="workflow-step">Persiapan Data</span><span class="workflow-arrow">→</span>
+        <span class="workflow-step">Pemilihan Metode</span><span class="workflow-arrow">→</span>
+        <span class="workflow-step">Analisis Hasil</span><span class="workflow-arrow">→</span>
+        <span class="workflow-step">Rekomendasi</span>
+      </div>
+    </div>''', unsafe_allow_html=True)
+
+    st.markdown('''<div class="section-head">
+      <div class="section-kicker">DATA SOURCES</div>
+      <div class="section-title">Informasi Dataset</div>
+      <div class="section-desc">Ringkasan data yang digunakan pada masing-masing aktivitas praktik.</div>
+    </div>''', unsafe_allow_html=True)
+    groceries = groceries_raw()
+    movies = movies_raw()
+    books = book_interactions()
+    dataset_info = pd.DataFrame([
+        ["Apriori contoh", "Data transaksi pada materi", 5, "Transaksi sederhana"],
+        ["Groceries", "groceries.csv", len(groceries), "Baris transaksi"],
+        ["MovieLens", "movie.csv", len(movies), "Film"],
+        ["MovieLens rating", "rating.csv", len(ratings_raw()), "Rating tambahan dalam arsip"],
+        ["Book-Crossing — data tersaring", "book_knn_interactions.csv.gz", len(books), "Interaksi rating terpilih"],
+        ["User-Based dan Hybrid", "Data contoh pada materi", len(EXAMPLE_RATINGS), "Baris rating contoh"],
+    ], columns=["Dataset", "Sumber", "Jumlah baris", "Keterangan"])
+    st.dataframe(dataset_info, hide_index=True, use_container_width=True)
+    st.caption(
+        "File music.csv dan Online Retail.xlsx tersedia dalam paket materi, namun tidak dipakai langsung "
+        "oleh tujuh aktivitas yang ditampilkan."
+    )
 
 def render_apriori():
-    hero('AKTIVITAS 01 · ASSOCIATION RULE', 'Apriori pada transaksi contoh', 'Mencari kombinasi barang yang sering dibeli bersama menggunakan lima transaksi dari notebook dosen.')
+    hero('AKTIVITAS 01 · ASSOCIATION RULE', 'Apriori pada transaksi contoh', 'Mencari kombinasi barang yang sering dibeli bersama menggunakan lima transaksi berdasarkan materi.')
     up=st.file_uploader('Opsional: unggah CSV transaksi sendiri (tiap baris = satu transaksi; tanpa header)', type=['csv'], key='up_a1')
     if up:
         tx=transactions_from_frame(pd.read_csv(BytesIO(up.getvalue()),header=None,dtype=str))
@@ -275,7 +521,7 @@ def render_apriori():
 
 def render_groceries():
     hero('AKTIVITAS 02 · ASSOCIATION RULE', 'Market Basket Analysis — Groceries',
-         'Eksplorasi transaksi belanja dan aturan Apriori menggunakan dataset Groceries dari dosen.')
+         'Eksplorasi transaksi belanja dan aturan Apriori menggunakan dataset Groceries berdasarkan materi.')
     st.info('Mode aman: membuka halaman ini tidak otomatis menjalankan perhitungan. Atur parameter, lalu klik **Jalankan Analisis**.')
 
     with st.form('groceries_form'):
@@ -340,7 +586,7 @@ def render_groceries():
             filtered=display[display[col].apply(lambda s:prod in [x.strip() for x in s.split(',')])]
             if len(filtered):show_table(filtered.head(30),'aturan_barang_spesifik.csv')
             else:st.info('Tidak ditemukan aturan untuk barang tersebut pada parameter saat ini.')
-    note('Dataset yang digunakan adalah CSV Groceries dari dosen. Batas panjang kombinasi 2 atau 3 diterapkan untuk mencegah aplikasi kehabisan memori; karena itu jumlah aturan mungkin berbeda dari pengolahan tanpa batas di R.')
+    note('Dataset yang digunakan adalah CSV Groceries dalam materi. Batas panjang kombinasi 2 atau 3 diterapkan untuk mencegah aplikasi kehabisan memori; karena itu jumlah aturan mungkin berbeda dari pengolahan tanpa batas di R.')
 
 
 def render_content():
@@ -376,7 +622,7 @@ def render_content():
 
 
 def render_movie():
-    hero('AKTIVITAS 04 · CONTENT-BASED', 'Movie Recommendation — MovieLens', 'Rekomendasi film berdasarkan kemiripan genre dari dataset Movie.zip yang diberikan dosen.')
+    hero('AKTIVITAS 04 · CONTENT-BASED', 'Movie Recommendation — MovieLens', 'Rekomendasi film berdasarkan kemiripan genre dari dataset Movie.zip yang digunakan dalam materi.')
     up=st.file_uploader('Opsional: unggah CSV dengan kolom movieId, title, genres',type=['csv'],key='up_mov')
     if up:
         frame=pd.read_csv(up)
@@ -413,7 +659,7 @@ def render_movie():
 
 
 def render_user_cf():
-    hero('AKTIVITAS 05 · COLLABORATIVE FILTERING', 'User-Based Collaborative Filtering', 'Mencari tetangga pengguna paling mirip dari pola rating film yang dicontohkan dalam notebook dosen.')
+    hero('AKTIVITAS 05 · COLLABORATIVE FILTERING', 'User-Based Collaborative Filtering', 'Mencari tetangga pengguna paling mirip dari pola rating film yang dicontohkan berdasarkan materi.')
     up=st.file_uploader('Opsional: unggah CSV dengan kolom Pengguna, Film, Rating',type=['csv'],key='up_ub')
     df=pd.read_csv(up) if up else EXAMPLE_RATINGS.copy()
     if not {'Pengguna','Film','Rating'}.issubset(df.columns):st.error('Butuh kolom Pengguna, Film, Rating.');return
@@ -443,7 +689,7 @@ def render_user_cf():
 
 def render_item_cf():
     hero('AKTIVITAS 06 · COLLABORATIVE FILTERING', 'Item-Based kNN — Book-Crossing', 'Menemukan judul buku yang serupa dari pola rating pengguna menggunakan k-Nearest Neighbors dengan jarak cosine.')
-    st.caption('Dataset siap pakai telah diproses dari tiga CSV dalam BX-Users.zip menggunakan filter yang tercantum di notebook dosen.')
+    st.caption('Dataset siap pakai telah diproses dari tiga CSV dalam BX-Users.zip menggunakan filter yang tercantum di materi.')
     up=st.file_uploader('Opsional: unggah CSV siap olah dengan kolom userID, bookTitle, bookRating',type=['csv'],key='up_book')
     if up:
         df=pd.read_csv(up)
@@ -476,7 +722,7 @@ def render_item_cf():
         chart_layout(px.bar(counts,x='Rating',y='Jumlah',title='Distribusi rating buku'))
         st.caption('Rating 0 berasal dari data Book-Crossing dan merepresentasikan rating implisit / tanpa penilaian numerik eksplisit.')
     with t3:
-        st.markdown('''**Mengikuti tahapan notebook dosen:**
+        st.markdown('''**Mengikuti tahapan materi:**
 
 1. Memilih pengguna dengan setidaknya 200 interaksi rating pada data asli.
 2. Mempertahankan nilai rating yang muncul sedikitnya 100 kali (sesuai script).
@@ -484,7 +730,7 @@ def render_item_cf():
 4. Menyaring pengguna dengan lokasi mengandung `usa` atau `canada`.
 5. Menghapus pasangan pengguna–judul yang duplikat, lalu membentuk matriks buku × pengguna untuk kNN cosine.
 
-**Catatan:** agar repo ringan, dashboard menyertakan data hasil filter dari file dosen, bukan keseluruhan arsip mentah. Jumlah buku dapat berbeda bila CSV dibaca dengan kebijakan baris rusak yang berbeda.''')
+**Catatan:** agar repo ringan, dashboard menyertakan data hasil penyaringan dari arsip sumber, bukan keseluruhan arsip mentah. Jumlah buku dapat berbeda bila CSV dibaca dengan kebijakan baris rusak yang berbeda.''')
     note('Jarak cosine yang lebih kecil berarti pola rating buku lebih mirip. Skor ini mengukur kemiripan berdasarkan interaksi, bukan kesamaan isi cerita buku.')
 
 
@@ -540,14 +786,14 @@ def render_hybrid():
 Skor merupakan peringkat internal contoh ini, **bukan probabilitas** seorang pengguna akan menyukai film.''')
         st.dataframe(movies,hide_index=True,use_container_width=True)
         st.dataframe(ratings,hide_index=True,use_container_width=True)
-    note('Data dan formula dipertahankan dari notebook Hybrid dosen. Bobot dapat diganti untuk melihat pengaruh pendekatan berbasis konten dan pengguna terhadap urutan rekomendasi.')
+    note('Data dan formula dipertahankan dari notebook Hybrid pada materi. Bobot dapat diganti untuk melihat pengaruh pendekatan berbasis konten dan pengguna terhadap urutan rekomendasi.')
 
 
-if page==NAV[0]:render_overview()
-elif page==NAV[1]:render_apriori()
-elif page==NAV[2]:render_groceries()
-elif page==NAV[3]:render_content()
-elif page==NAV[4]:render_movie()
-elif page==NAV[5]:render_user_cf()
-elif page==NAV[6]:render_item_cf()
-elif page==NAV[7]:render_hybrid()
+if page==NAV[0]: render_overview()
+elif page==NAV[1]: render_apriori()
+elif page==NAV[2]: render_groceries()
+elif page==NAV[3]: render_content()
+elif page==NAV[4]: render_movie()
+elif page==NAV[5]: render_user_cf()
+elif page==NAV[6]: render_item_cf()
+elif page==NAV[7]: render_hybrid()
