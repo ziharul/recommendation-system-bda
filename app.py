@@ -32,108 +32,116 @@ DATA = ROOT / "data"
 # mengikuti .streamlit/config.toml yang disertakan bersama app.py.
 st.markdown('''
 <style>
-:root { --page:#F4F7FB; --paper:#FFFFFF; --navy:#172B4D; --ink:#334155;
-        --muted:#64748B; --line:#E2E8F0; --blue:#2563EB; --softblue:#EAF1FF; }
-html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"] {
-    background-color:var(--page); color:var(--ink);
+:root {
+  --page:#F4F7FB; --paper:#FFFFFF; --navy:#172B4D; --ink:#334155;
+  --muted:#64748B; --line:#E2E8F0; --blue:#2563EB; --softblue:#EFF5FF;
+  --shadow:0 3px 15px rgba(20,47,87,.035);
 }
-[data-testid="stHeader"] { background:rgba(244,247,251,.96); }
-.block-container {padding-top:1.5rem; padding-bottom:4rem; max-width:1360px;}
-[data-testid="stSidebar"] {
-    background:#FFFFFF; border-right:1px solid var(--line);
-    min-width:288px; max-width:315px;
-}
-[data-testid="stSidebar"] > div:first-child { background:#FFFFFF; }
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap:.28rem; }
-[data-testid="stSidebar"] .stButton { margin:.05rem 0; }
+html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {background:var(--page);color:var(--ink);}
+[data-testid="stHeader"] {background:rgba(244,247,251,.97);}
+.block-container {max-width:1290px;padding:1.45rem 2rem 3rem;}
+/* Stable, consistent spacing across Streamlit's repeated containers. */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {gap:.88rem;}
+[data-testid="stVerticalBlock"] {gap:.8rem;}
+[data-testid="stHorizontalBlock"] {gap:1rem;align-items:stretch;}
+[data-testid="column"] {min-width:0;}
+[data-testid="stSidebar"] {background:#FFFFFF;border-right:1px solid var(--line);min-width:288px;max-width:315px;}
+[data-testid="stSidebar"] > div:first-child {background:#FFFFFF;}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap:.26rem;}
+[data-testid="stSidebar"] .stButton {margin:.04rem 0;}
 [data-testid="stSidebar"] .stButton > button {
-    width:100%; display:flex; justify-content:flex-start; align-items:center;
-    text-align:left; border:1px solid transparent; border-radius:10px;
-    background:transparent; color:#475569; font-size:.86rem;
-    font-weight:500; padding:.61rem .8rem; min-height:41px;
-    transition:background .16s ease,border-color .16s ease,color .16s ease;
+  display:flex;align-items:center;justify-content:flex-start;width:100%;
+  min-height:40px;text-align:left;padding:.57rem .76rem;border:1px solid transparent;
+  border-radius:9px;background:transparent;color:#475569;font-weight:500;font-size:.84rem;
+  transition:background .15s ease, color .15s ease, border-color .15s ease;
 }
-[data-testid="stSidebar"] .stButton > button:hover {
-    background:#F3F7FD; border-color:#E3EAF6; color:#1D4ED8;
-}
-[data-testid="stSidebar"] .stButton > button:focus:not(:active) { color:#1D4ED8; }
-[data-testid="stSidebar"] .stButton > button p { font-size:.86rem; }
-.side-brand {display:flex; align-items:center; gap:11px; padding:9px 2px 17px;}
-.brand-icon {width:42px; height:42px; background:#EAF1FF; border-radius:12px;
-    display:flex; align-items:center;justify-content:center;flex-shrink:0;}
-.brand-title {color:#152A49; font-size:15px; font-weight:750; line-height:1.25;}
-.brand-caption {color:#7A8AA2; font-size:11px; margin-top:3px;}
-.side-section {color:#8392AA; font-size:10px; letter-spacing:.095em;
-    font-weight:800; margin:14px 0 7px 6px;}
-.side-rule {height:1px; background:#E7EDF4; margin:4px 0 9px;}
-.side-footer {border-top:1px solid #E5EBF3; margin-top:20px; padding-top:16px;
-    display:flex; align-items:center; gap:10px; color:#62748F; font-size:11px;}
-.side-footer strong {color:#34445C; font-size:12px;}
-h1,h2,h3,h4 {color:#172B4D;letter-spacing:-.028em;}
-h2 {margin-top:.6rem;}
-.hero {background:linear-gradient(116deg, #FFFFFF 0%,#FFFFFF 72%,#EEF5FF 100%);
-    padding:27px 30px; border:1px solid #E2E8F0; border-radius:18px;
-    margin-bottom:20px; box-shadow:0 5px 20px rgba(29,55,94,.035);}
-.hero h1 {font-size:2.05rem; margin:0 0 9px;color:#172B4D;line-height:1.18;}
-.hero p {color:#64748B; margin:0; font-size:.97rem; line-height:1.65; max-width:840px;}
-.eyebrow {color:#2563EB; font-size:11px; font-weight:800;
-    letter-spacing:.095em; margin-bottom:12px;}
-.note {padding:14px 17px; background:#EEF5FF; border-left:3px solid #2563EB;
-    border-radius:9px; margin:17px 0; color:#334155; line-height:1.65;font-size:.9rem;}
-.smallcap {color:#7C8BA4;font-size:12px;}
-/* Kartu angka, tab, panel, tabel, dan formulir */
-[data-testid="stMetric"] {background:#FFF;border:1px solid #E2E8F0;
-    border-radius:14px; padding:16px 18px; box-shadow:0 5px 14px rgba(25,49,89,.025);}
-[data-testid="stMetricLabel"] {color:#64748B;}
-[data-testid="stMetricValue"] {color:#172B4D; font-weight:730;}
-[data-testid="stVerticalBlockBorderWrapper"] {background:#FFFFFF; border-color:#E2E8F0; border-radius:16px;}
-[data-testid="stTabs"] [data-baseweb="tab-list"] {gap:9px;}
-[data-testid="stTabs"] [data-baseweb="tab"] {
-    border-radius:9px 9px 0 0; font-weight:550; color:#64748B;
-}
-[data-testid="stTabs"] [aria-selected="true"] {color:#1D4ED8;}
-[data-testid="stFileUploader"] {border-radius:13px;}
-[data-testid="stDataFrame"] {border-radius:12px;overflow:hidden;}
-[data-testid="stForm"] {background:#FFF;border:1px solid #E2E8F0;
-    border-radius:15px; padding:17px;}
-.stDownloadButton button {border:1px solid #C7D8FB; background:#EFF5FF;
-    color:#1D4ED8; border-radius:10px; font-weight:650;}
+[data-testid="stSidebar"] .stButton > button p {font-size:.84rem;line-height:1.3;}
+[data-testid="stSidebar"] .stButton > button:hover {background:#F2F6FD;color:#1D4ED8;border-color:#E0E9F8;}
+.side-brand {display:flex;align-items:center;gap:11px;padding:9px 2px 14px;}
+.brand-icon {width:42px;height:42px;border-radius:12px;background:#EAF1FF;display:flex;justify-content:center;align-items:center;flex-shrink:0;}
+.brand-title {color:#152A49;font-size:15px;font-weight:750;line-height:1.25;}
+.brand-caption {color:#7A8AA2;font-size:11px;margin-top:3px;}
+.side-section {color:#8392AA;font-size:10px;font-weight:800;letter-spacing:.095em;margin:13px 0 6px 6px;}
+.side-rule {height:1px;background:#E7EDF4;margin:3px 0 8px;}
+.side-footer {border-top:1px solid #E5EBF3;margin-top:19px;padding-top:15px;display:flex;align-items:center;gap:10px;color:#62748F;font-size:11px;}
+.side-footer strong {color:#34445C;font-size:12px;}
+/* Shared page header, navigation spacing and data summary cards. */
+h1,h2,h3,h4 {color:var(--navy);letter-spacing:-.025em;}
+h2 {margin-top:.45rem;}
+.hero {background:linear-gradient(116deg,#FFFFFF 0%,#FFFFFF 72%,#EFF5FF 100%);
+  padding:23px 27px;border:1px solid var(--line);border-radius:17px;
+  margin:0 0 10px;box-shadow:var(--shadow);}
+.hero h1 {font-size:1.83rem;line-height:1.22;margin:0 0 8px;color:var(--navy);font-weight:780;}
+.hero p {font-size:.89rem;line-height:1.55;color:var(--muted);margin:0;max-width:850px;}
+.eyebrow {font-size:10px;color:var(--blue);font-weight:800;letter-spacing:.095em;margin-bottom:9px;}
+.section-head {margin:15px 0 8px;}
+.section-head.tight {margin:15px 0 2px;}
+.section-kicker {font-size:10px;color:var(--blue);font-weight:800;letter-spacing:.09em;}
+.section-title {font-size:1.27rem;color:var(--navy);font-weight:760;letter-spacing:-.022em;margin:4px 0;line-height:1.25;}
+.section-desc {color:var(--muted);font-size:.83rem;line-height:1.53;}
+/* Compact and truly balanced metric cards on every analysis page. */
+[data-testid="stMetric"] {background:#FFFFFF;border:1px solid var(--line);border-radius:13px;
+  min-height:92px;padding:13px 16px;box-shadow:var(--shadow);}
+[data-testid="stMetricLabel"] {color:#64748B;font-size:.8rem;}
+[data-testid="stMetricValue"] {color:#172B4D;font-weight:760;font-size:1.8rem;line-height:1.17;}
+[data-testid="stMetricDelta"] {font-size:.75rem;}
+/* Borders use the same token, shadows kept subtle and controls never oversized. */
+[data-testid="stVerticalBlockBorderWrapper"] {border:1px solid var(--line);background:#FFFFFF;border-radius:14px;box-shadow:var(--shadow);}
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {gap:.68rem;}
+[data-testid="stForm"] {background:#FFFFFF;border:1px solid var(--line);border-radius:14px;
+  padding:15px 17px;box-shadow:var(--shadow);}
+[data-testid="stForm"] [data-testid="stVerticalBlock"] {gap:.65rem;}
+[data-testid="stFileUploaderDropzone"] {background:#FCFDFF;border:1px dashed #C8D7EA;border-radius:11px;padding:10px 12px;}
+[data-testid="stFileUploader"] label,[data-testid="stWidgetLabel"] p {font-size:.86rem;color:#34445C;font-weight:600;}
+.stSelectbox [data-baseweb="select"] > div,.stNumberInput input,.stTextInput input,
+.stMultiSelect [data-baseweb="select"] > div {border-radius:9px;background:#FFFFFF;}
+/* Separate tab buttons from content without leaving a large empty panel. */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {gap:5px;border-bottom:1px solid #E1E8F1;padding-bottom:5px;}
+[data-testid="stTabs"] [data-baseweb="tab"] {background:transparent;border-radius:9px;padding:7px 13px;
+  color:#64748B;font-weight:600;font-size:.86rem;border:1px solid transparent;}
+[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {background:#EAF1FF;color:#1D4ED8;border-color:#DCE8FC;}
+[data-testid="stTabs"] [data-baseweb="tab-panel"] {padding-top:12px;}
+[data-testid="stDataFrame"] {border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#FFF;}
+[data-testid="stPlotlyChart"] {background:#FFFFFF;border:1px solid var(--line);border-radius:13px;padding:6px 8px;box-shadow:var(--shadow);}
+.stDownloadButton button {border:1px solid #C7D8FB;background:#EFF5FF;color:#1D4ED8;
+  border-radius:9px;font-size:.83rem;font-weight:650;min-height:35px;}
 .stDownloadButton button:hover {background:#E3EEFF;color:#1D4ED8;}
-.stButton button[kind="primary"], .stFormSubmitButton button[kind="primary"] {
-    background:#2563EB; border-color:#2563EB; color:#FFF; border-radius:10px;
-}
-.stButton button[kind="primary"]:hover, .stFormSubmitButton button[kind="primary"]:hover {
-    background:#1D4ED8; border-color:#1D4ED8;
-}
-/* Overview */
-.section-head {margin:24px 0 16px;}
-.section-kicker {font-size:11px;color:#2563EB;font-weight:800;letter-spacing:.10em;}
-.section-title {font-size:1.43rem;color:#172B4D;font-weight:760;letter-spacing:-.03em;margin:5px 0;}
-.section-desc {font-size:.89rem;line-height:1.6;color:#64748B;}
-.module-top {display:flex;justify-content:space-between;align-items:center;margin:3px 0 16px;}
-.module-icon {width:44px;height:44px;border-radius:12px;display:flex;
-    align-items:center;justify-content:center;font-size:22px;}
-.module-index {font-size:10px;color:#9AA8B9;font-weight:750;letter-spacing:.06em;}
-.module-title {font-size:1.12rem;font-weight:760;color:#172B4D;margin-bottom:9px;}
-.module-desc {font-size:.9rem;line-height:1.65;color:#64748B;min-height:93px;}
-.module-divider {height:1px;background:#E7ECF4;margin:15px 0;}
-.module-label {font-size:.78rem;font-weight:750;color:#334155;margin-bottom:8px;}
-.module-study {color:#475569;font-size:.83rem;line-height:1.7;min-height:56px;}
-.module-outcome {border-radius:10px;padding:12px 13px;margin:13px 0 9px;}
-.module-outcome-label {font-size:10px;color:#64748B;font-weight:750;letter-spacing:.045em;}
-.module-outcome-text {font-size:.85rem;font-weight:750;margin-top:4px;}
-.module-foot {color:#7C8BA4;font-size:.76rem;padding-bottom:8px;}
-.workflow-card {background:#FFF; border:1px solid #E2E8F0; border-radius:15px;
-    padding:20px;margin:12px 0 18px;}
-.workflow-title {color:#172B4D;font-size:1rem;font-weight:750;margin-bottom:13px;}
-.workflow-line {display:flex;flex-wrap:wrap;gap:9px;align-items:center;}
-.workflow-step {background:#EFF5FF;border:1px solid #DBE9FF;border-radius:9px;
-    color:#1D4ED8;font-weight:650;font-size:.81rem;padding:10px 12px;}
+.stButton button[kind="primary"],.stFormSubmitButton button[kind="primary"] {
+  background:#2563EB;color:#FFF;border-color:#2563EB;border-radius:9px;font-weight:650;}
+.stButton button[kind="primary"]:hover,.stFormSubmitButton button[kind="primary"]:hover {background:#1D4ED8;border-color:#1D4ED8;}
+.note {padding:12px 15px;margin:12px 0;background:#EEF5FF;border-left:3px solid var(--blue);
+  border-radius:9px;color:#334155;font-size:.84rem;line-height:1.55;}
+.smallcap {color:#7C8BA4;font-size:12px;}
+/* Overview: cards only as tall as their content; consistent typography and spacing. */
+.module-top {display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
+.module-icon {width:40px;height:40px;border-radius:11px;display:flex;align-items:center;
+  justify-content:center;font-size:20px;flex-shrink:0;}
+.module-index {font-size:10px;color:#90A0B7;font-weight:750;letter-spacing:.045em;}
+.module-title {font-size:1.08rem;font-weight:780;color:#172B4D;margin:0 0 6px;line-height:1.3;}
+.module-desc {font-size:.84rem;line-height:1.52;color:#64748B;margin:0 0 12px;min-height:0;}
+.module-divider {height:1px;background:#E7ECF4;margin:9px 0;}
+.module-label {font-size:.73rem;font-weight:760;color:#334155;margin:0 0 3px;}
+.module-study {color:#475569;font-size:.8rem;line-height:1.47;margin:0 0 8px;min-height:0;}
+.module-outcome {border-radius:9px;padding:9px 11px;margin:8px 0 7px;}
+.module-outcome-label {font-size:9px;color:#64748B;font-weight:750;letter-spacing:.04em;}
+.module-outcome-text {font-size:.81rem;font-weight:730;margin-top:3px;line-height:1.4;}
+.module-foot {color:#7C8BA4;font-size:.73rem;padding:0;margin:0;}
+/* Buttons inside module cards become compact and visually aligned. */
+[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {min-height:36px;border-radius:9px;
+  font-size:.81rem;font-weight:600;background:#FFFFFF;border-color:#DAE4F1;color:#334155;}
+[data-testid="stVerticalBlockBorderWrapper"] .stButton > button:hover {background:#EFF5FF;color:#1D4ED8;border-color:#BACFF6;}
+.workflow-card {background:#FFFFFF;border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+  margin:7px 0 12px;box-shadow:var(--shadow);}
+.workflow-title {font-size:.95rem;color:#172B4D;font-weight:750;margin:0 0 11px;}
+.workflow-line {display:flex;flex-wrap:wrap;align-items:center;gap:7px;}
+.workflow-step {background:#EFF5FF;color:#1D4ED8;font-size:.78rem;font-weight:650;
+  border:1px solid #DBE9FF;border-radius:8px;padding:8px 10px;}
 .workflow-arrow {color:#9FB0CA;font-weight:800;}
 @media(max-width:950px) {
-    .hero{padding:20px 22px;}.hero h1{font-size:1.7rem;}
-    .module-desc{min-height:0;}.module-study{min-height:0;}
-    .workflow-arrow {display:none;}
+ .block-container{padding:1rem 1rem 2rem;}
+ .hero{padding:19px 20px;}.hero h1{font-size:1.6rem;}
+ [data-testid="stHorizontalBlock"]{gap:.65rem;}
+ .workflow-arrow{display:none;}
 }
 </style>
 ''', unsafe_allow_html=True)
@@ -228,12 +236,34 @@ def metrics(entries):
 
 
 def show_table(df, filename="hasil_analisis.csv", height=320):
-    st.dataframe(df, use_container_width=True, height=height, hide_index=True)
+    compact_dataframe(df, height=height, hide_index=True)
     st.download_button("Unduh hasil CSV", df.to_csv(index=False).encode("utf-8-sig"),
                        file_name=filename, mime="text/csv", icon=":material/download:")
 
 
-def chart_layout(fig, height=380):
+def compact_dataframe(df, height=None, **kwargs):
+    """Show results without reserving hundreds of empty pixels for small datasets."""
+    try:
+        rows = len(df)
+    except (ValueError, TypeError):
+        rows = 10
+    ideal = max(115, min(400, 39 * (min(rows, 10) + 1)))
+    actual = min(ideal, height) if height else ideal
+    kwargs.setdefault("use_container_width", True)
+    st.dataframe(df, height=actual, **kwargs)
+
+
+def section_heading(kicker, heading, description=""):
+    """A single typographic hierarchy for all analysis activities."""
+    st.markdown(
+        f'<div class="section-head tight"><div class="section-kicker">{kicker}</div>'
+        f'<div class="section-title">{heading}</div>'
+        f'<div class="section-desc">{description}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def chart_layout(fig, height=360):
     fig.update_layout(
         template="plotly_white", height=height,
         paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
@@ -484,7 +514,7 @@ def render_overview():
         ["Book-Crossing — data tersaring", "book_knn_interactions.csv.gz", len(books), "Interaksi rating terpilih"],
         ["User-Based dan Hybrid", "Data contoh pada materi", len(EXAMPLE_RATINGS), "Baris rating contoh"],
     ], columns=["Dataset", "Sumber", "Jumlah baris", "Keterangan"])
-    st.dataframe(dataset_info, hide_index=True, use_container_width=True)
+    compact_dataframe(dataset_info, hide_index=True, use_container_width=True)
     st.caption(
         "File music.csv dan Online Retail.xlsx tersedia dalam paket materi, namun tidak dipakai langsung "
         "oleh tujuh aktivitas yang ditampilkan."
@@ -492,6 +522,7 @@ def render_overview():
 
 def render_apriori():
     hero('AKTIVITAS 01 · ASSOCIATION RULE', 'Apriori pada transaksi contoh', 'Mencari kombinasi barang yang sering dibeli bersama menggunakan lima transaksi berdasarkan materi.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     up=st.file_uploader('Opsional: unggah CSV transaksi sendiri (tiap baris = satu transaksi; tanpa header)', type=['csv'], key='up_a1')
     if up:
         tx=transactions_from_frame(pd.read_csv(BytesIO(up.getvalue()),header=None,dtype=str))
@@ -502,11 +533,12 @@ def render_apriori():
     with a: support=st.slider('Minimum support',0.1,1.0,0.4,0.05,key='sup_a1')
     with b: confidence=st.slider('Minimum confidence',0.1,1.0,0.7,0.05,key='conf_a1')
     itemsets,rules,basket=apriori_tables(tx,support,confidence)
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Transaksi',f'{len(tx):,}'),('Jenis barang',str(basket.shape[1])),('Frequent itemsets',str(len(itemsets))),('Association rules',str(len(rules)))])
-    t1,t2,t3=st.tabs(['🧾 Data transaksi','🔍 Frequent itemsets','🔗 Aturan asosiasi'])
+    t1,t2,t3=st.tabs(['Data transaksi','Frequent itemsets','Aturan asosiasi'])
     with t1:
-        st.dataframe(pd.DataFrame({'Transaksi':[i+1 for i in range(len(tx))], 'Isi keranjang':[', '.join(t) for t in tx]}), hide_index=True,use_container_width=True)
-        st.dataframe(basket.head(15),use_container_width=True)
+        compact_dataframe(pd.DataFrame({'Transaksi':[i+1 for i in range(len(tx))], 'Isi keranjang':[', '.join(t) for t in tx]}), hide_index=True,use_container_width=True)
+        compact_dataframe(basket.head(15),use_container_width=True)
     with t2:
         st.markdown('Kombinasi barang yang memiliki nilai support ≥ batas pilihan.')
         show_table(pretty_itemsets(itemsets),'apriori_frequent_itemsets.csv')
@@ -522,6 +554,7 @@ def render_apriori():
 def render_groceries():
     hero('AKTIVITAS 02 · ASSOCIATION RULE', 'Market Basket Analysis — Groceries',
          'Eksplorasi transaksi belanja dan aturan Apriori menggunakan dataset Groceries berdasarkan materi.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     st.info('Mode aman: membuka halaman ini tidak otomatis menjalankan perhitungan. Atur parameter, lalu klik **Jalankan Analisis**.')
 
     with st.form('groceries_form'):
@@ -558,13 +591,14 @@ def render_groceries():
     itemsets,rules,frequency,n_orders,n_items = st.session_state['groceries_last_result']
     s_prev,c_prev,l_prev = st.session_state['groceries_last_params']
     st.caption(f'Hasil perhitungan terakhir — support {s_prev:.3f} · confidence {c_prev:.2f} · maksimal {l_prev} barang per kombinasi.')
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Transaksi',f'{n_orders:,}'),('Jenis barang',f'{n_items:,}'),
              ('Frequent itemsets',f'{len(itemsets):,}'),('Aturan asosiasi',f'{len(rules):,}')])
-    t1,t2,t3 = st.tabs(['📊 Frekuensi barang','🔗 Aturan asosiasi','🎯 Analisis barang tertentu'])
+    t1,t2,t3 = st.tabs(['Frekuensi barang','Aturan asosiasi','Analisis barang'])
     with t1:
         top=frequency.head(15).rename_axis('Barang').reset_index(name='Frekuensi')
         chart_layout(px.bar(top,x='Frekuensi',y='Barang',orientation='h',title='15 jenis barang paling sering muncul'))
-        st.dataframe(top,hide_index=True,use_container_width=True)
+        compact_dataframe(top,hide_index=True,use_container_width=True)
     with t2:
         display=pretty_rules(rules)
         if display.empty:
@@ -591,6 +625,7 @@ def render_groceries():
 
 def render_content():
     hero('AKTIVITAS 03 · CONTENT-BASED', 'Content-Based Recommendation', 'Rekomendasi berdasarkan kemiripan deskripsi lima film menggunakan TF-IDF dan cosine similarity.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     st.caption('Default: lima film contoh yang ditulis langsung dalam notebook Content_Based_Recommendation.ipynb.')
     up=st.file_uploader('Opsional: unggah CSV dengan kolom Judul dan Deskripsi',type=['csv'],key='up_cb')
     df=pd.read_csv(up) if up else EXAMPLE_CONTENT.copy()
@@ -608,21 +643,23 @@ def render_content():
     nearest=np.argsort(-similarity[idx],kind='stable')
     nearest=[i for i in nearest if i!=idx][:n]
     result=pd.DataFrame({'Film rekomendasi':df.loc[nearest,'Judul'].to_numpy(),'Kemiripan':similarity[idx,nearest]})
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Jumlah film',len(df)),('Istilah TF-IDF',matrix.shape[1]),('Rekomendasi',len(result))])
-    t1,t2,t3=st.tabs(['🎯 Rekomendasi','📊 Matriks kemiripan','📄 Data deskripsi'])
+    t1,t2,t3=st.tabs(['Rekomendasi','Matriks kemiripan','Data deskripsi'])
     with t1:
         show_table(result,'content_based_rekomendasi.csv')
         chart_layout(px.bar(result,x='Kemiripan',y='Film rekomendasi',orientation='h',title=f'Film mirip dengan {title}'))
     with t2:
         if len(df)<=30:
-            chart_layout(px.imshow(similarity,x=df.Judul.tolist(),y=df.Judul.tolist(),zmin=0,zmax=1,aspect='auto',title='Cosine similarity antarfilm'),height=420)
+            chart_layout(px.imshow(similarity,x=df.Judul.tolist(),y=df.Judul.tolist(),zmin=0,zmax=1,aspect='auto',title='Cosine similarity antarfilm'),height=390)
         else: st.info('Matriks heatmap dibatasi untuk maksimal 30 film; rekomendasi tetap diproses.')
-    with t3: st.dataframe(df,use_container_width=True,hide_index=True)
+    with t3: compact_dataframe(df,use_container_width=True,hide_index=True)
     note('TF-IDF mengubah deskripsi menjadi representasi angka, lalu cosine similarity mengukur kedekatan konten. Skor tinggi berarti deskripsi lebih mirip, bukan jaminan film akan disukai pengguna.')
 
 
 def render_movie():
     hero('AKTIVITAS 04 · CONTENT-BASED', 'Movie Recommendation — MovieLens', 'Rekomendasi film berdasarkan kemiripan genre dari dataset Movie.zip yang digunakan dalam materi.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     up=st.file_uploader('Opsional: unggah CSV dengan kolom movieId, title, genres',type=['csv'],key='up_mov')
     if up:
         frame=pd.read_csv(up)
@@ -642,24 +679,26 @@ def render_movie():
     result=frame.loc[top,['title_year','genres','year']].copy()
     result['Kesamaan genre']=scores[top]
     result=result.rename(columns={'title_year':'Film rekomendasi','genres':'Genre','year':'Tahun'})
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Film valid',f'{len(frame):,}'),('Fitur genre TF-IDF',str(X.shape[1])),('Rekomendasi',len(result))])
-    tab1,tab2,tab3=st.tabs(['🎞️ Rekomendasi film','📊 Analisis genre','🗃️ Dataset'])
+    tab1,tab2,tab3=st.tabs(['Rekomendasi film','Analisis genre','Dataset'])
     with tab1:
         show_table(result,'movie_recommendations.csv')
-        chart_layout(px.bar(result.head(12),x='Kesamaan genre',y='Film rekomendasi',orientation='h',title=f'Film paling mirip dengan {title}'),height=430)
+        chart_layout(px.bar(result.head(12),x='Kesamaan genre',y='Film rekomendasi',orientation='h',title=f'Film paling mirip dengan {title}'),height=400)
     with tab2:
         counts=Counter(g.strip() for val in frame.genres.dropna() for g in str(val).split('|') if g.strip())
         top_genres=pd.DataFrame(counts.most_common(18),columns=['Genre','Jumlah film'])
         chart_layout(px.bar(top_genres,x='Jumlah film',y='Genre',orientation='h',title='18 genre paling umum'))
-        st.dataframe(top_genres,hide_index=True,use_container_width=True)
+        compact_dataframe(top_genres,hide_index=True,use_container_width=True)
     with tab3:
-        st.dataframe(frame[['title_year','genres','year']].head(200),hide_index=True,use_container_width=True)
+        compact_dataframe(frame[['title_year','genres','year']].head(200),hide_index=True,use_container_width=True)
         st.caption('Rating.csv juga tersedia dari Movie.zip, tetapi notebook Content_Based_Filtering_ML menggunakan fitur genre dari movie.csv untuk metode ini.')
     note('Untuk menghemat memori, dashboard menghitung kemiripan film yang dipilih terhadap semua film, bukan membangun matriks kemiripan penuh 9.000 × 9.000. Rumus cosine similarity tetap setara.')
 
 
 def render_user_cf():
     hero('AKTIVITAS 05 · COLLABORATIVE FILTERING', 'User-Based Collaborative Filtering', 'Mencari tetangga pengguna paling mirip dari pola rating film yang dicontohkan berdasarkan materi.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     up=st.file_uploader('Opsional: unggah CSV dengan kolom Pengguna, Film, Rating',type=['csv'],key='up_ub')
     df=pd.read_csv(up) if up else EXAMPLE_RATINGS.copy()
     if not {'Pengguna','Film','Rating'}.issubset(df.columns):st.error('Butuh kolom Pengguna, Film, Rating.');return
@@ -674,21 +713,23 @@ def render_user_cf():
     nearest=neighbours.index[0]
     unseen=(matrix.loc[user]==0)&(matrix.loc[nearest]>=threshold)
     recommendations=pd.DataFrame({'Film':matrix.columns[unseen], 'Rating pengguna serupa':matrix.loc[nearest,unseen].values})
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Pengguna',df.Pengguna.nunique()),('Film',df.Film.nunique()),('Tetangga terdekat',nearest),('Kemiripan',f'{float(neighbours.iloc[0]):.3f}')])
-    t1,t2,t3=st.tabs(['👥 Hasil rekomendasi','📈 Kemiripan pengguna','🗂️ Matriks rating'])
+    t1,t2,t3=st.tabs(['Hasil rekomendasi','Kemiripan pengguna','Matriks rating'])
     with t1:
         st.write(f'Pengguna **{user}** paling mirip dengan **{nearest}**.')
         if len(recommendations):show_table(recommendations,'user_based_rekomendasi.csv')
         else:st.info('Tidak ada film baru dengan rating tetangga yang memenuhi batas ini. Kondisi ini mungkin terjadi pada dataset contoh yang sangat kecil.')
     with t2:
         chart_layout(px.imshow(sim,x=sim.columns,y=sim.index,zmin=0,zmax=1,title='Cosine similarity antar pengguna'))
-        st.dataframe(neighbours.rename('Skor kesamaan').reset_index().rename(columns={'index':'Pengguna lain'}),hide_index=True,use_container_width=True)
-    with t3:st.dataframe(matrix,use_container_width=True)
+        compact_dataframe(neighbours.rename('Skor kesamaan').reset_index().rename(columns={'index':'Pengguna lain'}),hide_index=True,use_container_width=True)
+    with t3:compact_dataframe(matrix,use_container_width=True)
     note('Angka 0 pada matriks berarti <b>belum ada rating</b> (missing), bukan rating negatif. Penentuan rekomendasi mengikuti notebook: film yang belum dinilai pengguna target tetapi diberi rating tinggi oleh tetangga terdekat.')
 
 
 def render_item_cf():
     hero('AKTIVITAS 06 · COLLABORATIVE FILTERING', 'Item-Based kNN — Book-Crossing', 'Menemukan judul buku yang serupa dari pola rating pengguna menggunakan k-Nearest Neighbors dengan jarak cosine.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     st.caption('Dataset siap pakai telah diproses dari tiga CSV dalam BX-Users.zip menggunakan filter yang tercantum di materi.')
     up=st.file_uploader('Opsional: unggah CSV siap olah dengan kolom userID, bookTitle, bookRating',type=['csv'],key='up_book')
     if up:
@@ -711,12 +752,13 @@ def render_item_cf():
     for j,d in zip(indices[0],dists[0]):
         if j!=index: rec.append({'Buku rekomendasi':pivot.index[j],'Kemiripan (1 − jarak)':round(float(1-d),4),'Jarak cosine':round(float(d),4)})
     result=pd.DataFrame(rec).head(n)
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Interaksi setelah filter',f'{len(df):,}'),('Buku',f'{len(pivot):,}'),('Pengguna',f'{len(pivot.columns):,}'),('Rekomendasi',len(result))])
-    t1,t2,t3=st.tabs(['📚 Rekomendasi buku','📊 Pola rating','ℹ️ Proses filter data'])
+    t1,t2,t3=st.tabs(['Rekomendasi buku','Pola rating','Proses filter data'])
     with t1:
         if len(result):
             show_table(result,'item_based_buku.csv')
-            chart_layout(px.bar(result,x='Kemiripan (1 − jarak)',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=420)
+            chart_layout(px.bar(result,x='Kemiripan (1 − jarak)',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
     with t2:
         counts=df.bookRating.value_counts().sort_index().rename_axis('Rating').reset_index(name='Jumlah')
         chart_layout(px.bar(counts,x='Rating',y='Jumlah',title='Distribusi rating buku'))
@@ -736,6 +778,7 @@ def render_item_cf():
 
 def render_hybrid():
     hero('AKTIVITAS 07 · HYBRID', 'Hybrid Recommendation System', 'Mengombinasikan content-based filtering (kemiripan genre) dan collaborative filtering (pola rating pengguna).')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     movies=EXAMPLE_HYBRID.copy()
     ratings=EXAMPLE_RATINGS.rename(columns={'Pengguna':'User','Film':'Movie'}).copy()
     a,b=st.columns(2)
@@ -764,8 +807,9 @@ def render_hybrid():
         score_df[['CB Normalisasi','CF Normalisasi']]=MinMaxScaler().fit_transform(score_df[['CB Score','CF Score']])
         score_df['Hybrid Score']=cb_weight*score_df['CB Normalisasi']+cf_weight*score_df['CF Normalisasi']
         score_df=score_df.sort_values('Hybrid Score',ascending=False).reset_index(drop=True)
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Pengguna',target),('Film kandidat',len(candidate)),('Bobot CB',f'{cb_weight:.0%}'),('Bobot CF',f'{cf_weight:.0%}')])
-    t1,t2,t3=st.tabs(['🏆 Peringkat rekomendasi','⚖️ Kontribusi metode','📖 Data dan rumus'])
+    t1,t2,t3=st.tabs(['Peringkat rekomendasi','Kontribusi metode','Data dan rumus'])
     with t1:
         if score_df.empty: st.info('Pengguna sudah memberi rating pada semua film; tidak ada kandidat baru.')
         else:
@@ -784,8 +828,8 @@ def render_hybrid():
 - **Hybrid Score** = `(bobot CB × CB Normalisasi) + (bobot CF × CF Normalisasi)`.
 
 Skor merupakan peringkat internal contoh ini, **bukan probabilitas** seorang pengguna akan menyukai film.''')
-        st.dataframe(movies,hide_index=True,use_container_width=True)
-        st.dataframe(ratings,hide_index=True,use_container_width=True)
+        compact_dataframe(movies,hide_index=True,use_container_width=True)
+        compact_dataframe(ratings,hide_index=True,use_container_width=True)
     note('Data dan formula dipertahankan dari notebook Hybrid pada materi. Bobot dapat diganti untuk melihat pengaruh pendekatan berbasis konten dan pengguna terhadap urutan rekomendasi.')
 
 
