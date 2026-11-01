@@ -123,7 +123,20 @@ def apriori_tables(transactions, minimum_support, minimum_confidence, maximum_le
 def run_groceries(support, confidence, max_len, uploaded_bytes=None):
     frame = pd.read_csv(BytesIO(uploaded_bytes), header=None, dtype=str) if uploaded_bytes else groceries_raw()
     transactions = transactions_from_frame(frame)
-    itemsets, rules, basket = apriori_tables(transactions, support, confidence, None if max_len == 0 else max_len)
+    # Pengaman Streamlit Cloud: hindari Apriori tanpa batas panjang itemset.
+    # low_memory=True menurunkan konsumsi memori saat membangkitkan kandidat.
+    if max_len not in (2, 3):
+        raise ValueError("Panjang kombinasi hanya boleh 2 atau 3 untuk dashboard cloud.")
+    if len(transactions) > 50000:
+        raise ValueError("Dataset terlalu besar untuk paket cloud ini (maksimal 50.000 transaksi).")
+    encoder = TransactionEncoder()
+    encoded = encoder.fit(transactions).transform(transactions)
+    basket = pd.DataFrame(encoded, columns=encoder.columns_)
+    if basket.shape[1] > 300:
+        raise ValueError("Dataset memiliki lebih dari 300 jenis barang. Saring dahulu item yang jarang muncul.")
+    itemsets = apriori(basket, min_support=support, use_colnames=True,
+                      max_len=max_len, low_memory=True)
+    rules = association_rules(itemsets, metric="confidence", min_threshold=confidence) if len(itemsets) else pd.DataFrame()
     freq = basket.sum().sort_values(ascending=False)
     return itemsets, rules, freq, len(transactions), basket.shape[1]
 
@@ -261,40 +274,73 @@ def render_apriori():
 
 
 def render_groceries():
-    hero('AKTIVITAS 02 · ASSOCIATION RULE', 'Market Basket Analysis — Groceries', 'Eksplorasi transaksi belanja dan pembentukan aturan Apriori menggunakan file Groceries dari dosen.')
-    up=st.file_uploader('Opsional: ganti data dengan CSV transaksi (tanpa header)', type=['csv'],key='up_gro')
-    c1,c2,c3=st.columns(3)
-    with c1: support=st.number_input('Minimum support',min_value=0.001,max_value=0.1,value=0.001,step=0.001,format='%.3f',key='sup_g')
-    with c2: confidence=st.slider('Minimum confidence',min_value=0.05,max_value=1.0,value=0.8,step=0.05,key='conf_g')
-    with c3: max_choice=st.selectbox('Panjang kombinasi maksimal',['Tidak dibatasi','2','3','4'],index=0,help='Tanpa batas mengikuti prinsip script Apriori dalam contoh R.')
-    limit=0 if max_choice=='Tidak dibatasi' else int(max_choice)
-    try: itemsets,rules,frequency,n_orders,n_items=run_groceries(float(support),float(confidence),limit,up.getvalue() if up else None)
-    except Exception as e:
-        st.error(f'Perhitungan gagal: {e}');return
-    metrics([('Transaksi',f'{n_orders:,}'),('Jenis barang',f'{n_items:,}'),('Frequent itemsets',f'{len(itemsets):,}'),('Aturan asosiasi',f'{len(rules):,}')])
-    t1,t2,t3=st.tabs(['📊 Frekuensi barang','🔗 Aturan asosiasi','🎯 Analisis barang tertentu'])
+    hero('AKTIVITAS 02 · ASSOCIATION RULE', 'Market Basket Analysis — Groceries',
+         'Eksplorasi transaksi belanja dan aturan Apriori menggunakan dataset Groceries dari dosen.')
+    st.info('Mode aman: membuka halaman ini tidak otomatis menjalankan perhitungan. Atur parameter, lalu klik **Jalankan Analisis**.')
+
+    with st.form('groceries_form'):
+        up = st.file_uploader('Opsional: ganti data dengan CSV transaksi (tanpa header)',
+                              type=['csv'], key='up_gro')
+        c1,c2,c3 = st.columns(3)
+        with c1:
+            support = st.number_input('Minimum support', min_value=0.001,
+                                      max_value=0.1, value=0.005, step=0.001,
+                                      format='%.3f', key='sup_g',
+                                      help='0,005 berarti kombinasi muncul pada setidaknya 0,5% transaksi.')
+        with c2:
+            confidence = st.slider('Minimum confidence', min_value=0.05,
+                                   max_value=1.0, value=0.8, step=0.05, key='conf_g')
+        with c3:
+            max_len = st.selectbox('Panjang kombinasi maksimal', [2,3], index=0,
+                                   help='Dibatasi pada 2 atau 3 item untuk menjaga penggunaan RAM di Streamlit Cloud.')
+        submitted = st.form_submit_button('▶ Jalankan Analisis', type='primary', use_container_width=True)
+
+    if submitted:
+        try:
+            with st.spinner('Menghitung aturan asosiasi. Proses berjalan dengan batas memori...'):
+                res = run_groceries(float(support),float(confidence),int(max_len),up.getvalue() if up else None)
+            st.session_state['groceries_last_result'] = res
+            st.session_state['groceries_last_params'] = (float(support),float(confidence),int(max_len))
+        except Exception as e:
+            st.error(f'Perhitungan gagal: {e}')
+            return
+
+    if 'groceries_last_result' not in st.session_state:
+        st.caption('Dataset default: 9.835 transaksi dan 169 jenis barang. Gunakan parameter bawaan untuk uji pertama.')
+        st.stop()
+
+    itemsets,rules,frequency,n_orders,n_items = st.session_state['groceries_last_result']
+    s_prev,c_prev,l_prev = st.session_state['groceries_last_params']
+    st.caption(f'Hasil perhitungan terakhir — support {s_prev:.3f} · confidence {c_prev:.2f} · maksimal {l_prev} barang per kombinasi.')
+    metrics([('Transaksi',f'{n_orders:,}'),('Jenis barang',f'{n_items:,}'),
+             ('Frequent itemsets',f'{len(itemsets):,}'),('Aturan asosiasi',f'{len(rules):,}')])
+    t1,t2,t3 = st.tabs(['📊 Frekuensi barang','🔗 Aturan asosiasi','🎯 Analisis barang tertentu'])
     with t1:
         top=frequency.head(15).rename_axis('Barang').reset_index(name='Frekuensi')
         chart_layout(px.bar(top,x='Frekuensi',y='Barang',orientation='h',title='15 jenis barang paling sering muncul'))
         st.dataframe(top,hide_index=True,use_container_width=True)
     with t2:
         display=pretty_rules(rules)
-        if display.empty: st.info('Belum ada aturan yang memenuhi batas support dan confidence. Turunkan parameternya.')
+        if display.empty:
+            st.info('Belum ada aturan yang memenuhi batas support dan confidence. Turunkan parameternya.')
         else:
-            show_table(display.head(250), 'groceries_rules_top250.csv')
+            show_table(display.head(250),'groceries_rules_top250.csv')
             graph=display.head(300)
-            chart_layout(px.scatter(graph,x='Support',y='Confidence',size='Lift',hover_data=['Jika membeli','Maka membeli'],title='Pola support–confidence–lift'))
+            chart_layout(px.scatter(graph,x='Support',y='Confidence',size='Lift',
+                                    hover_data=['Jika membeli','Maka membeli'],
+                                    title='Pola support–confidence–lift'))
     with t3:
         display=pretty_rules(rules)
         prod=st.selectbox('Pilih barang',list(frequency.index),key='target_g')
         direction=st.radio('Posisi barang', ['Barang yang disarankan (RHS)','Barang yang sudah dipilih (LHS)'],horizontal=True)
-        if display.empty: st.info('Belum ada aturan yang memenuhi parameter.')
+        if display.empty:
+            st.info('Belum ada aturan yang memenuhi parameter.')
         else:
             col='Maka membeli' if direction.startswith('Barang yang disarankan') else 'Jika membeli'
             filtered=display[display[col].apply(lambda s:prod in [x.strip() for x in s.split(',')])]
             if len(filtered):show_table(filtered.head(30),'aturan_barang_spesifik.csv')
-            else: st.info('Tidak ditemukan aturan untuk barang tersebut pada parameter saat ini.')
-    note('Script R dosen memanggil dataset <b>Groceries</b> bawaan paket <code>arules</code> untuk perhitungan aturannya, dan memuat CSV <code>data_groceries.csv</code> untuk eksplorasi frekuensi. Dashboard ini menghitung langsung dari CSV yang dikirim dosen; angka dapat sedikit berbeda jika isi file dan opsi algoritma tidak identik dengan objek R.')
+            else:st.info('Tidak ditemukan aturan untuk barang tersebut pada parameter saat ini.')
+    note('Dataset yang digunakan adalah CSV Groceries dari dosen. Batas panjang kombinasi 2 atau 3 diterapkan untuk mencegah aplikasi kehabisan memori; karena itu jumlah aturan mungkin berbeda dari pengolahan tanpa batas di R.')
 
 
 def render_content():
