@@ -86,8 +86,7 @@ h2 {margin-top:.45rem;}
 [data-testid="stMetricValue"] {color:#172B4D;font-weight:760;font-size:1.8rem;line-height:1.17;}
 [data-testid="stMetricDelta"] {font-size:.75rem;}
 /* Borders use the same token, shadows kept subtle and controls never oversized. */
-[data-testid="stVerticalBlockBorderWrapper"] {border:1px solid var(--line);background:#FFFFFF;border-radius:14px;box-shadow:var(--shadow);}
-[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {gap:.68rem;}
+/* Native st.container(border=True) already supplies a border. Do not add a second one to every nested block. */
 [data-testid="stForm"] {background:#FFFFFF;border:1px solid var(--line);border-radius:14px;
   padding:15px 17px;box-shadow:var(--shadow);}
 [data-testid="stForm"] [data-testid="stVerticalBlock"] {gap:.65rem;}
@@ -102,7 +101,7 @@ h2 {margin-top:.45rem;}
 [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {background:#EAF1FF;color:#1D4ED8;border-color:#DCE8FC;}
 [data-testid="stTabs"] [data-baseweb="tab-panel"] {padding-top:12px;}
 [data-testid="stDataFrame"] {border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#FFF;}
-[data-testid="stPlotlyChart"] {background:#FFFFFF;border:1px solid var(--line);border-radius:13px;padding:6px 8px;box-shadow:var(--shadow);}
+[data-testid="stPlotlyChart"] {background:#FFFFFF;border:0;border-radius:13px;padding:4px;box-shadow:none;}
 .stDownloadButton button {border:1px solid #C7D8FB;background:#EFF5FF;color:#1D4ED8;
   border-radius:9px;font-size:.83rem;font-weight:650;min-height:35px;}
 .stDownloadButton button:hover {background:#E3EEFF;color:#1D4ED8;}
@@ -127,9 +126,14 @@ h2 {margin-top:.45rem;}
 .module-outcome-text {font-size:.81rem;font-weight:730;margin-top:3px;line-height:1.4;}
 .module-foot {color:#7C8BA4;font-size:.73rem;padding:0;margin:0;}
 /* Buttons inside module cards become compact and visually aligned. */
-[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {min-height:36px;border-radius:9px;
-  font-size:.81rem;font-weight:600;background:#FFFFFF;border-color:#DAE4F1;color:#334155;}
-[data-testid="stVerticalBlockBorderWrapper"] .stButton > button:hover {background:#EFF5FF;color:#1D4ED8;border-color:#BACFF6;}
+/* Only overview navigation buttons share this style; other page buttons remain native. */
+[class*="st-key-overview_"] button {min-height:36px;min-width:0;border-radius:10px;
+  font-weight:680;background:#F8FAFF;border:1px solid #D9E4F4;color:#254265;box-shadow:none;}
+[class*="st-key-overview_"] button p {font-size:.90rem !important;white-space:nowrap !important;}
+[class*="st-key-overview_"] button:hover {border-color:#9CB9F5;background:#EAF1FF;color:#1D4ED8;}
+[class*="st-key-overview_3"] button,[class*="st-key-overview_4"] button {background:#F8F4FF;color:#6D28D9;border-color:#E7DBFE;}
+[class*="st-key-overview_5"] button,[class*="st-key-overview_6"] button {background:#F0FBF7;color:#047857;border-color:#CDEFE2;}
+[class*="st-key-overview_7"] button {background:#FFF7EF;color:#C2410C;border-color:#FEDFC8;}
 .workflow-card {background:#FFFFFF;border:1px solid var(--line);border-radius:14px;padding:16px 18px;
   margin:7px 0 12px;box-shadow:var(--shadow);}
 .workflow-title {font-size:.95rem;color:#172B4D;font-weight:750;margin:0 0 11px;}
@@ -153,15 +157,14 @@ h2 {margin-top:.45rem;}
 /* CSS layout containment prevents long words / chart labels from growing grid columns. */
 [data-testid="column"] {overflow-wrap:anywhere;}
 [data-testid="stHorizontalBlock"] {gap:1.5rem;}
-[data-testid="stVerticalBlockBorderWrapper"] {
-  min-width:0;width:100%;max-width:100%;
-  padding:clamp(19px,2vw,25px) !important;
-  overflow:hidden;
-  border-radius:16px;
-  box-shadow:0 4px 18px rgba(20,47,87,.045);
-}
-[data-testid="stVerticalBlockBorderWrapper"] > div {max-width:100%;min-width:0;}
-[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {gap:.9rem;min-width:0;}
+/* V3 applied padding and borders to *every* internal Streamlit wrapper.
+   Leave the native panel alone and target only the intended overview cards. */
+[data-testid="stVerticalBlockBorderWrapper"] {min-width:0;max-width:100%;}
+[data-testid="stVerticalBlockBorderWrapper"] > div {min-width:0;max-width:100%;}
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {min-width:0;}
+/* One border per visible module; subtle highlights provide visual interest without extra boxes. */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.module-top) {border-radius:16px;}
+.module-top + .module-title {margin-top:0;}
 /* Forms and metrics keep sufficient breathing room at all screen sizes. */
 [data-testid="stMetric"] {padding:20px 24px;min-height:103px;border-radius:15px;max-width:100%;}
 [data-testid="stForm"] {padding:23px 25px;border-radius:15px;max-width:100%;overflow:hidden;}
@@ -211,7 +214,7 @@ h2 {margin-top:.45rem;}
  .block-container {padding:1.15rem 1.05rem 2rem;}
  .hero {padding:21px 22px;}
  [data-testid="stHorizontalBlock"] {gap:.9rem;}
- [data-testid="stVerticalBlockBorderWrapper"] {padding:18px !important;}
+ /* Keep native container padding on mobile too. */
  [data-testid="stMetric"] {padding:15px 17px;}
  [data-testid="stForm"] {padding:18px;}
  [data-testid="stPlotlyChart"] {padding:10px;}
@@ -219,6 +222,46 @@ h2 {margin-top:.45rem;}
  .workflow-line {grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
 }
 @media(max-width:420px) {.workflow-line {grid-template-columns:1fr;}}
+
+
+/* V4 — Typography & accent polish; keep card sizes and page gutters unchanged. */
+.hero h1 {font-size:2.08rem;line-height:1.2;}
+.hero p {font-size:1rem;line-height:1.63;}
+.eyebrow,.section-kicker {font-size:11px;}
+.section-title {font-size:1.52rem;line-height:1.25;}
+.section-desc {font-size:.96rem;line-height:1.6;}
+.section-head {margin-top:20px;}
+.module-top {margin-bottom:15px;}
+.module-icon {width:44px;height:44px;font-size:22px;}
+.module-index {font-size:11px;}
+.module-title {font-size:1.24rem;line-height:1.3;margin-bottom:9px;}
+.module-desc {font-size:.97rem;line-height:1.58;color:#465A74;}
+.module-label {font-size:.84rem;}
+.module-study {font-size:.94rem;line-height:1.55;color:#465A74;}
+.module-outcome {margin:12px 0 11px;padding:15px 17px;}
+.module-outcome-label {font-size:10px;}
+.module-outcome-text {font-size:.96rem;line-height:1.5;}
+.module-foot {font-size:.84rem;color:#687B95;}
+.module-index {padding:6px 10px;border:1px solid #E1E9F4;border-radius:999px;background:#F7FAFF;}
+[data-testid="stMetricLabel"] p {font-size:.92rem !important;color:#4D607A !important;}
+[data-testid="stMetricValue"] {font-size:2.03rem;}
+[data-testid="stWidgetLabel"] p, [data-testid="stFileUploader"] label {font-size:.96rem !important;}
+[data-testid="stTabs"] [data-baseweb="tab"] {font-size:.94rem;}
+[data-testid="stDataFrame"] {font-size:.9rem;}
+.note {font-size:.95rem;line-height:1.65;}
+.workflow-title {font-size:1.08rem;}
+.workflow-step {font-size:.88rem;}
+/* A little depth from color, not extra frames. */
+.hero {background:linear-gradient(120deg,#FFFFFF 0%,#F3F7FF 78%,#EAF5FF 100%);}
+[data-testid="stMetric"] {background:linear-gradient(145deg,#FFFFFF 72%,#EFF5FF 100%);border-color:#DCE7F6;}
+[data-testid="stMetric"]:nth-of-type(even) {background:linear-gradient(145deg,#FFFFFF 70%,#F2EEFF 100%);}
+/* Preserve readable font sizing on medium screens. */
+@media(max-width:900px) {
+ .hero h1{font-size:1.75rem;}
+ .module-title{font-size:1.1rem;}
+ .module-desc,.module-study{font-size:.9rem;}
+ [class*="st-key-overview_"] button p{font-size:.82rem !important;}
+}
 
 </style>
 ''', unsafe_allow_html=True)
@@ -341,18 +384,30 @@ def section_heading(kicker, heading, description=""):
 
 
 def chart_layout(fig, height=360):
+    chart_accent = {
+        "Apriori Analysis":"#2563EB", "Market Basket Analysis":"#0F9D8A",
+        "Content-Based Recommendation":"#7C3AED", "Movie Recommendation":"#7C3AED",
+        "User-Based Collaborative Filtering":"#08916B",
+        "Item-Based Collaborative Filtering":"#08916B", "Hybrid Recommendation":"#EA580C",
+    }.get(page, "#2563EB")
     fig.update_layout(
         template="plotly_white", height=height,
         paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
         margin=dict(l=15, r=15, t=45, b=25),
-        font=dict(color="#334155", size=12),
-        colorway=["#2563EB", "#7C3AED", "#059669", "#EA580C"],
-        title_font=dict(color="#172B4D", size=15),
+        font=dict(color="#334155", size=14),
+        colorway=[chart_accent, "#7C3AED", "#059669", "#EA580C"],
+        title_font=dict(color="#172B4D", size=17),
         autosize=True,
         xaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6", automargin=True),
         yaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6", automargin=True),
         legend=dict(orientation="h", y=-0.22, x=0),
     )
+    # Only recolor plain bar traces; continuous-color visualizations keep their meaningful scale.
+    for trace in fig.data:
+        if getattr(trace, "type", None) == "bar" and getattr(trace, "marker", None) is not None:
+            current = getattr(trace.marker, "color", None)
+            if current is None or (isinstance(current, str) and current.lower() == "#636efa"):
+                trace.marker.color = chart_accent
     st.plotly_chart(fig, use_container_width=True, config={"responsive":True,"displaylogo":False})
 
 @st.cache_data(show_spinner=False)
@@ -506,7 +561,7 @@ def render_overview():
             "dari riwayat transaksi, termasuk barang yang sering dibeli bersamaan.",
             lessons="Apriori, frequent itemsets, support, confidence, dan lift.",
             outcome="Pola pembelian dan aturan asosiasi", foot="2 aktivitas · Apriori & Market Basket",
-            actions=[(1,"Buka Apriori"),(2,"Buka Market Basket")],
+            actions=[(1,"Apriori"),(2,"Market Basket")],
         ),
         dict(
             no="02", name="Content-Based Filtering", mark="▣", color="#7C3AED", bg="#F1ECFF",
@@ -514,7 +569,7 @@ def render_overview():
             "item digunakan untuk merekomendasikan film yang memiliki ciri serupa.",
             lessons="TF-IDF, cosine similarity, dan pemeringkatan kemiripan konten.",
             outcome="Daftar rekomendasi film serupa", foot="2 aktivitas · Content-Based & Movie",
-            actions=[(3,"Buka Content-Based"),(4,"Buka Movie")],
+            actions=[(3,"Content-Based"),(4,"Movie")],
         ),
         dict(
             no="03", name="Collaborative Filtering", mark="◉", color="#059669", bg="#E7F8F0",
@@ -522,7 +577,7 @@ def render_overview():
             "preferensi pengguna dan pola penilaian antaritem.",
             lessons="User-Based Filtering serta Item-Based Filtering dengan kNN.",
             outcome="Rekomendasi dari pola rating", foot="2 aktivitas · User-Based & Item-Based",
-            actions=[(5,"Buka User-Based"),(6,"Buka Item-Based")],
+            actions=[(5,"User-Based"),(6,"Item-Based")],
         ),
         dict(
             no="04", name="Hybrid Recommendation", mark="◇", color="#EA580C", bg="#FFF0E5",
@@ -530,7 +585,7 @@ def render_overview():
             "berbasis kesamaan konten dan preferensi pengguna agar keputusan memanfaatkan beberapa sumber informasi.",
             lessons="Kombinasi skor Content-Based dan Collaborative, normalisasi, serta pembobotan.",
             outcome="Rekomendasi gabungan dan pemeringkatan", foot="1 aktivitas · Hybrid Recommendation",
-            actions=[(7,"Buka Hybrid Recommendation")],
+            actions=[(7,"Hybrid Recommendation")],
         ),
     ]
 
@@ -540,11 +595,11 @@ def render_overview():
             with col:
                 with st.container(border=True):
                     st.markdown(f'''
-                    <div class="module-top">
+                    <div class="module-top" style="border-top:3px solid {module['color']};padding-top:12px">
                       <div class="module-icon" style="background:{module['bg']};color:{module['color']}">{module['mark']}</div>
                       <div class="module-index">MODULE {module['no']} / 04</div>
                     </div>
-                    <div class="module-title">{module['name']}</div>
+                    <div class="module-title" style="color:{module['color']}">{module['name']}</div>
                     <div class="module-desc">{module['desc']}</div>
                     <div class="module-divider"></div>
                     <div class="module-label">Yang dipelajari</div>
