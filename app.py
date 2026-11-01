@@ -143,6 +143,83 @@ h2 {margin-top:.45rem;}
  [data-testid="stHorizontalBlock"]{gap:.65rem;}
  .workflow-arrow{display:none;}
 }
+
+/* V3: gutters and containment: keep *every* panel inside its allocated column. */
+*,*::before,*::after {box-sizing:border-box;}
+[data-testid="stMain"], [data-testid="stMainBlockContainer"] {min-width:0;max-width:100%;overflow-x:clip;}
+.block-container {width:100%;max-width:1210px;padding:2rem clamp(1.3rem,3vw,2.7rem) 3.5rem;}
+[data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"],
+[data-testid="column"], [data-testid="stElementContainer"] {min-width:0;max-width:100%;}
+/* CSS layout containment prevents long words / chart labels from growing grid columns. */
+[data-testid="column"] {overflow-wrap:anywhere;}
+[data-testid="stHorizontalBlock"] {gap:1.5rem;}
+[data-testid="stVerticalBlockBorderWrapper"] {
+  min-width:0;width:100%;max-width:100%;
+  padding:clamp(19px,2vw,25px) !important;
+  overflow:hidden;
+  border-radius:16px;
+  box-shadow:0 4px 18px rgba(20,47,87,.045);
+}
+[data-testid="stVerticalBlockBorderWrapper"] > div {max-width:100%;min-width:0;}
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {gap:.9rem;min-width:0;}
+/* Forms and metrics keep sufficient breathing room at all screen sizes. */
+[data-testid="stMetric"] {padding:20px 24px;min-height:103px;border-radius:15px;max-width:100%;}
+[data-testid="stForm"] {padding:23px 25px;border-radius:15px;max-width:100%;overflow:hidden;}
+[data-testid="stFileUploaderDropzone"] {padding:18px 19px;max-width:100%;}
+.hero {padding:29px 32px;max-width:100%;margin-bottom:15px;}
+.note {padding:18px 22px;max-width:100%;}
+.section-head {margin:20px 0 12px;}
+/* Module cards: more distance from outline, but never fill excessive vertical space. */
+.module-top {margin-bottom:14px;}
+.module-title {margin:0 0 9px;line-height:1.35;}
+.module-desc {margin:0 0 14px;line-height:1.62;}
+.module-divider {margin:13px 0;}
+.module-study {margin:5px 0 13px;line-height:1.57;}
+.module-outcome {margin:12px 0 11px;padding:15px 17px;border-radius:11px;max-width:100%;}
+.module-foot {margin-bottom:7px;}
+/* Plotly charts and data grids must never extend past their parent card. */
+[data-testid="stPlotlyChart"] {
+  min-width:0;max-width:100%;width:100%;
+  overflow:hidden;padding:18px 20px;border-radius:15px;
+}
+[data-testid="stPlotlyChart"] > div,
+[data-testid="stPlotlyChart"] .js-plotly-plot,
+[data-testid="stPlotlyChart"] .plot-container,
+[data-testid="stPlotlyChart"] .svg-container {
+  max-width:100% !important;
+}
+[data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+  max-width:100%;min-width:0;overflow:hidden;border-radius:12px;
+}
+[data-testid="stTabs"] {max-width:100%;min-width:0;}
+[data-testid="stTabs"] [data-baseweb="tab-panel"] {min-width:0;max-width:100%;padding-top:18px;}
+/* Replace an over-wide arrow chain with a five-column flow that truly fits. */
+.workflow-card {width:100%;max-width:100%;overflow:hidden;padding:23px 25px;margin:12px 0 22px;}
+.workflow-title {margin:0 0 17px;}
+.workflow-line {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:stretch;min-width:0;max-width:100%;}
+.workflow-step {position:relative;display:flex;align-items:center;justify-content:center;
+ text-align:center;padding:13px 10px;min-width:0;max-width:100%;width:100%;
+ font-size:.76rem;overflow-wrap:break-word;white-space:normal;border-radius:9px;line-height:1.4;}
+.workflow-step:not(:last-child)::after {content:'›';position:absolute;right:-10px;top:50%;transform:translateY(-50%);
+ font-size:21px;font-weight:800;color:#91A8CB;z-index:2;line-height:1;}
+.workflow-arrow {display:none;}
+@media(max-width:1150px) {
+ .workflow-line {grid-template-columns:repeat(3,minmax(0,1fr));}
+ .workflow-step::after {display:none;}
+}
+@media(max-width:700px) {
+ .block-container {padding:1.15rem 1.05rem 2rem;}
+ .hero {padding:21px 22px;}
+ [data-testid="stHorizontalBlock"] {gap:.9rem;}
+ [data-testid="stVerticalBlockBorderWrapper"] {padding:18px !important;}
+ [data-testid="stMetric"] {padding:15px 17px;}
+ [data-testid="stForm"] {padding:18px;}
+ [data-testid="stPlotlyChart"] {padding:10px;}
+ .workflow-card {padding:18px;}
+ .workflow-line {grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+}
+@media(max-width:420px) {.workflow-line {grid-template-columns:1fr;}}
+
 </style>
 ''', unsafe_allow_html=True)
 
@@ -271,10 +348,12 @@ def chart_layout(fig, height=360):
         font=dict(color="#334155", size=12),
         colorway=["#2563EB", "#7C3AED", "#059669", "#EA580C"],
         title_font=dict(color="#172B4D", size=15),
-        xaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6"),
-        yaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6"),
+        autosize=True,
+        xaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6", automargin=True),
+        yaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6", automargin=True),
+        legend=dict(orientation="h", y=-0.22, x=0),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={"responsive":True,"displaylogo":False})
 
 @st.cache_data(show_spinner=False)
 def groceries_raw():
@@ -456,7 +535,7 @@ def render_overview():
     ]
 
     for start in range(0, len(modules), 2):
-        columns = st.columns(2, gap="medium")
+        columns = st.columns(2, gap="large")
         for col, module in zip(columns, modules[start:start+2]):
             with col:
                 with st.container(border=True):
@@ -490,10 +569,10 @@ def render_overview():
     <div class="workflow-card">
       <div class="workflow-title">Alur Pembelajaran dan Analisis</div>
       <div class="workflow-line">
-        <span class="workflow-step">Dataset</span><span class="workflow-arrow">→</span>
-        <span class="workflow-step">Persiapan Data</span><span class="workflow-arrow">→</span>
-        <span class="workflow-step">Pemilihan Metode</span><span class="workflow-arrow">→</span>
-        <span class="workflow-step">Analisis Hasil</span><span class="workflow-arrow">→</span>
+        <span class="workflow-step">Dataset</span>
+        <span class="workflow-step">Persiapan Data</span>
+        <span class="workflow-step">Pemilihan Metode</span>
+        <span class="workflow-step">Analisis Hasil</span>
         <span class="workflow-step">Rekomendasi</span>
       </div>
     </div>''', unsafe_allow_html=True)
