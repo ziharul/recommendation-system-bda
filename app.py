@@ -384,7 +384,7 @@ html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {
 .module-icon{width:49px;height:49px;border-radius:14px;font-size:23px;}
 .module-index{font-size:10px;background:#F6F8FC;border-color:#E6EDF7;color:#7D8FA9;}
 .module-title{font-size:1.3rem;font-weight:790;letter-spacing:-.025em;margin:0 0 9px;}
-.module-desc{font-size:.96rem;line-height:1.66;color:#63738B;margin-bottom:18px;}
+.module-desc{font-size:.96rem;line-height:1.66;color:#63738B;margin-bottom:18px;min-height:5rem;}
 .module-divider{background:#E9EFF7;margin:15px 0;}
 .module-label{color:#334969;font-size:.83rem;}
 .module-study{font-size:.92rem;color:#566B88;line-height:1.57;margin:5px 0 15px;}
