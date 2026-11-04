@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
-from collections import Counter
 import re
 
 import numpy as np
@@ -436,6 +435,58 @@ html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {
   }
 }
 
+
+/* Overview V6: graphical learning journey (no charts or extra data processing). */
+.journey-shell {
+  background:linear-gradient(126deg,#FFFFFF 0%,#FBFCFF 52%,#F2F6FF 100%);
+  border:1px solid #DBE5F4;border-radius:22px;padding:27px 28px 22px;
+  box-shadow:0 9px 25px rgba(27,57,111,.06);margin:15px 0 30px;
+  overflow:hidden;max-width:100%;
+}
+.journey-head {display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
+.journey-heading {font-size:1.12rem;font-weight:800;color:#1B3157;letter-spacing:-.025em;}
+.journey-subheading {color:#74859F;font-size:.85rem;margin-top:4px;}
+.journey-pill {font-size:.68rem;letter-spacing:.085em;font-weight:800;color:#3363D3;
+  padding:7px 11px;background:#EDF3FF;border:1px solid #DCE7FB;border-radius:999px;}
+.journey-grid {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;position:relative;}
+.journey-grid::before {content:'';position:absolute;z-index:0;left:10%;right:10%;top:36px;height:3px;
+  background:linear-gradient(90deg,#3971EF 0%,#8367EA 30%,#00A8A3 66%,#0EAE83 100%);
+  border-radius:4px;opacity:.33;}
+.journey-step {min-width:0;position:relative;z-index:1;text-align:center;padding:0 5px;
+  transition:transform .18s ease;}
+.journey-step:hover {transform:translateY(-4px);}
+.journey-step:nth-child(1){--step-a:#2563EB;--step-b:#5E8AFF;}
+.journey-step:nth-child(2){--step-a:#6D4BD9;--step-b:#9B79F1;}
+.journey-step:nth-child(3){--step-a:#0D93B8;--step-b:#49C0D4;}
+.journey-step:nth-child(4){--step-a:#0F9A86;--step-b:#4BCDB2;}
+.journey-step:nth-child(5){--step-a:#E7863A;--step-b:#F6B060;}
+.journey-node {display:flex;align-items:center;justify-content:center;margin:0 auto 14px;
+  width:74px;height:74px;border-radius:22px;color:white;position:relative;
+  border:5px solid #FFFFFF;background:linear-gradient(145deg,var(--step-a),var(--step-b));
+  box-shadow:0 8px 22px rgba(25,66,123,.18);}
+.journey-node svg {width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;}
+.journey-num {color:var(--step-a);font-size:.66rem;font-weight:850;letter-spacing:.12em;margin-bottom:7px;}
+.journey-name {font-weight:790;color:#1B3157;font-size:.91rem;line-height:1.35;margin-bottom:7px;}
+.journey-description {font-size:.77rem;line-height:1.5;color:#6D809B;max-width:195px;margin:0 auto;}
+.journey-footer {display:flex;align-items:center;gap:9px;margin-top:23px;padding-top:17px;
+  border-top:1px dashed #DFE7F4;color:#647894;font-size:.8rem;line-height:1.5;}
+.journey-footer-dot {height:8px;width:8px;flex:none;border-radius:100%;background:#34B39D;
+  box-shadow:0 0 0 4px #DDF8F1;}
+@media (max-width:850px) {
+  .journey-shell{padding:22px 20px;}
+  .journey-head{margin-bottom:22px;}
+  .journey-grid {display:flex;flex-direction:column;gap:18px;}
+  .journey-grid::before {top:29px;bottom:29px;left:28px;right:auto;width:3px;height:auto;}
+  .journey-step {display:flex;align-items:center;gap:14px;padding:0;text-align:left;}
+  .journey-node {flex:none;width:58px;height:58px;margin:0;border-radius:18px;border-width:4px;}
+  .journey-node svg {width:22px;height:22px;}
+  .journey-name {margin-bottom:3px;}
+  .journey-num {margin-bottom:4px;}
+  .journey-description {max-width:none;margin:0;}
+  .journey-footer {margin-top:20px;}
+}
+
 </style>
 ''', unsafe_allow_html=True)
 
@@ -747,71 +798,6 @@ def render_overview():
     # Hanya Overview, sehingga layout tujuh aktivitas lain tidak berubah.
     with st.container(key="overview_content", border=False):
         metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
-        # Data Insights Preview: hanya membaca dataset lokal yang sudah dipakai modul.
-        # Dua kolom sejajar tanpa st.columns() tambahan di dalam kartu.
-        st.markdown('''<div class="section-head">
-          <div class="section-kicker">EXPLORE REAL DATA</div>
-          <div class="section-title">Data Insights Preview</div>
-          <div class="section-desc">Gambaran singkat isi dataset sebelum menjalankan analisis rekomendasi.</div>
-        </div>''', unsafe_allow_html=True)
-
-        insight_left, insight_right = st.columns(2, gap="large")
-        with insight_left:
-            with st.container(border=True, key="insight_groceries"):
-                st.markdown("**Barang yang Paling Sering Dibeli**")
-                st.caption("Groceries · 7 barang dengan transaksi terbanyak")
-                counts = Counter(
-                    item for transaction in transactions_from_frame(groceries_raw())
-                    for item in transaction
-                )
-                top_items = pd.Series(counts, dtype="int64").nlargest(7).sort_values()
-                if top_items.empty:
-                    st.info("Belum ada barang yang dapat ditampilkan.")
-                else:
-                    fig = go.Figure(go.Bar(
-                        x=top_items.values, y=top_items.index, orientation="h",
-                        marker=dict(color="#3563E9", line=dict(width=0)),
-                        hovertemplate="%{y}: %{x:,} transaksi<extra></extra>",
-                    ))
-                    fig.update_layout(
-                        height=320, margin=dict(l=5, r=16, t=8, b=20),
-                        paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
-                        font=dict(color="#475569", size=12),
-                        xaxis=dict(title=None, showgrid=True, gridcolor="#EDF2FA", zeroline=False),
-                        yaxis=dict(title=None, showgrid=False, automargin=True),
-                    )
-                    st.plotly_chart(fig, use_container_width=True,
-                                    config={"displayModeBar": False})
-                    st.caption("Jumlah transaksi yang mengandung setiap barang.")
-
-        with insight_right:
-            with st.container(border=True, key="insight_movies"):
-                st.markdown("**Genre Film Terpopuler**")
-                st.caption("MovieLens · 7 genre dengan koleksi film terbanyak")
-                genre_counts = (
-                    movies_raw()["genres"].dropna().str.split("|").explode()
-                    .loc[lambda series: series.ne("(no genres listed)")]
-                    .value_counts().head(7).sort_values()
-                )
-                if genre_counts.empty:
-                    st.info("Belum ada genre yang dapat ditampilkan.")
-                else:
-                    fig = go.Figure(go.Bar(
-                        x=genre_counts.values, y=genre_counts.index, orientation="h",
-                        marker=dict(color="#7C3AED", line=dict(width=0)),
-                        hovertemplate="%{y}: %{x:,} film<extra></extra>",
-                    ))
-                    fig.update_layout(
-                        height=320, margin=dict(l=5, r=16, t=8, b=20),
-                        paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
-                        font=dict(color="#475569", size=12),
-                        xaxis=dict(title=None, showgrid=True, gridcolor="#F1ECFC", zeroline=False),
-                        yaxis=dict(title=None, showgrid=False, automargin=True),
-                    )
-                    st.plotly_chart(fig, use_container_width=True,
-                                    config={"displayModeBar": False})
-                    st.caption("Satu film dapat dihitung pada lebih dari satu genre.")
-
         st.markdown('''<div class="section-head">
           <div class="section-kicker">EXPLORE OUR MODULES</div>
           <div class="section-title">Learning Modules</div>
@@ -884,20 +870,47 @@ def render_overview():
 
 
         st.markdown('''<div class="section-head">
-          <div class="section-kicker">FROM DATA TO INSIGHT</div>
-          <div class="section-title">How Recommendation Systems Work</div>
-          <div class="section-desc">Tahapan umum analisis. Penerapannya menyesuaikan metode dan karakteristik dataset.</div>
-        </div>
-        <div class="workflow-card">
-          <div class="workflow-title">Alur Pembelajaran dan Analisis</div>
-          <div class="workflow-line">
-            <span class="workflow-step">Dataset</span>
-            <span class="workflow-step">Persiapan Data</span>
-            <span class="workflow-step">Pemilihan Metode</span>
-            <span class="workflow-step">Analisis Hasil</span>
-            <span class="workflow-step">Rekomendasi</span>
-          </div>
-        </div>''', unsafe_allow_html=True)
+  <div class="section-kicker">FROM DATA TO INSIGHT</div>
+  <div class="section-title">How Recommendation Systems Work</div>
+  <div class="section-desc">Dari data awal hingga rekomendasi yang dapat digunakan.</div>
+</div>
+<div class="journey-shell">
+  <div class="journey-head">
+    <div>
+      <div class="journey-heading">Dari Data Menjadi Rekomendasi</div>
+      <div class="journey-subheading">Lima tahapan inti dalam proses analisis</div>
+    </div>
+    <div class="journey-pill">5 LANGKAH · 1 ALUR</div>
+  </div>
+  <div class="journey-grid">
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 01</div><div class="journey-name">Dataset</div>
+      <div class="journey-description">Kumpulkan data transaksi, konten, atau rating.</div></div>
+    </div>
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z"/><path d="M8 5v3"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 02</div><div class="journey-name">Persiapan Data</div>
+      <div class="journey-description">Bersihkan dan susun data agar siap dianalisis.</div></div>
+    </div>
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.5" fill="none"/><circle cx="15" cy="17" r="2.5" fill="none"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 03</div><div class="journey-name">Pemilihan Metode</div>
+      <div class="journey-description">Terapkan Apriori, Content-Based, atau Collaborative.</div></div>
+    </div>
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17v-6M12 17V5M18 17V9"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 04</div><div class="journey-name">Analisis Hasil</div>
+      <div class="journey-description">Evaluasi pola, kemiripan, atau skor rekomendasi.</div></div>
+    </div>
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 05</div><div class="journey-name">Rekomendasi</div>
+      <div class="journey-description">Tampilkan barang atau film yang paling relevan.</div></div>
+    </div>
+  </div>
+  <div class="journey-footer"><span class="journey-footer-dot"></span><span>Alur ini merupakan gambaran umum. Tahapan rinci menyesuaikan metode yang digunakan pada setiap modul.</span></div>
+</div>''', unsafe_allow_html=True)
 
         st.markdown('''<div class="section-head">
           <div class="section-kicker">DATA SOURCES</div>
