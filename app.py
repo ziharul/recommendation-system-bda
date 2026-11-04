@@ -419,6 +419,23 @@ html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {
  .section-title{font-size:1.36rem;}
 }
 
+
+/* Overview only: one consistent inset for metrics, sections, cards and dataset.
+   IMPORTANT: use a plain container, not an extra st.columns wrapper. */
+.st-key-overview_content {
+  width: calc(100% - 48px);
+  max-width: calc(100% - 48px);
+  margin-left: auto;
+  margin-right: auto;
+  min-width: 0;
+}
+@media (max-width: 750px) {
+  .st-key-overview_content {
+    width: calc(100% - 24px);
+    max-width: calc(100% - 24px);
+  }
+}
+
 </style>
 ''', unsafe_allow_html=True)
 
@@ -726,10 +743,9 @@ def render_overview():
         <div class="hero-satellite s3"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"><path d="M4 13l5-5 4 4 7-7M16 5h4v4"/></svg></div>
       </div>
     </div>''', unsafe_allow_html=True)
-    # Satu kontainer dengan gutter tetap: metrik, judul, kartu, dan tabel sejajar.
-    # Hero tetap selebar area utama; tata letak halaman selain Overview tidak berubah.
-    overview_left, overview_body, overview_right = st.columns([0.05, 2, 0.05], gap="large")
-    with overview_body:
+    # Gutter konten tanpa kolom pembungkus: hindari nested-column API exception.
+    # Hanya Overview, sehingga layout tujuh aktivitas lain tidak berubah.
+    with st.container(key="overview_content", border=False):
         metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
         st.markdown('''<div class="section-head">
           <div class="section-kicker">EXPLORE OUR MODULES</div>
