@@ -1007,36 +1007,84 @@ def render_groceries():
     section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     st.info('Mode aman: membuka halaman ini tidak otomatis menjalankan perhitungan. Atur parameter, lalu klik **Jalankan Analisis**.')
 
-    with st.form('groceries_form'):
-        up = st.file_uploader('Opsional: ganti data dengan CSV transaksi (tanpa header)',
-                              type=['csv'], key='up_gro')
-        c1,c2,c3 = st.columns(3)
+    
+    with st.container(border=True):
+        up = st.file_uploader(
+            'Opsional: ganti data dengan CSV transaksi (tanpa header)',
+            type=['csv'],
+            key='up_gro'
+        )
+
+        c1, c2, c3 = st.columns(3)
+
         with c1:
-            support = st.number_input('Minimum support', min_value=0.001,
-                                      max_value=0.1, value=0.005, step=0.001,
-                                      format='%.3f', key='sup_g',
-                                      help='0,005 berarti kombinasi muncul pada setidaknya 0,5% transaksi.')
+            support = st.number_input(
+                'Minimum support',
+                min_value=0.001,
+                max_value=0.1,
+                value=0.005,
+                step=0.001,
+                format='%.3f',
+                key='sup_g',
+                help='0,005 berarti kombinasi muncul pada setidaknya 0,5% transaksi.'
+            )
+
         with c2:
-            confidence = st.slider('Minimum confidence', min_value=0.05,
-                                   max_value=1.0, value=0.8, step=0.05, key='conf_g')
+            confidence = st.slider(
+                'Minimum confidence',
+                min_value=0.05,
+                max_value=1.0,
+                value=0.8,
+                step=0.05,
+                key='conf_g'
+            )
+
         with c3:
-            max_len = st.selectbox('Panjang kombinasi maksimal', [2,3], index=0,
-                                   help='Dibatasi pada 2 atau 3 item untuk menjaga penggunaan RAM di Streamlit Cloud.')
-        submitted = st.form_submit_button('▶ Jalankan Analisis', type='primary', use_container_width=True)
+            max_len = st.selectbox(
+                'Panjang kombinasi maksimal',
+                [2, 3],
+                index=0,
+                key='maxlen_g',
+                help='Dibatasi pada 2 atau 3 item untuk menjaga penggunaan RAM di Streamlit Cloud.'
+            )
+
+        submitted = st.button(
+            '▶ Jalankan Analisis',
+            type='primary',
+            use_container_width=True,
+            key='run_groceries'
+        )
 
     if submitted:
         try:
             with st.spinner('Menghitung aturan asosiasi. Proses berjalan dengan batas memori...'):
-                res = run_groceries(float(support),float(confidence),int(max_len),up.getvalue() if up else None)
+                res = run_groceries(
+                    float(support),
+                    float(confidence),
+                    int(max_len),
+                    up.getvalue() if up is not None else None
+                )
+
             st.session_state['groceries_last_result'] = res
-            st.session_state['groceries_last_params'] = (float(support),float(confidence),int(max_len))
+            st.session_state['groceries_last_params'] = (
+                float(support),
+                float(confidence),
+                int(max_len)
+            )
+
+            st.success('Analisis berhasil dijalankan.')
+
         except Exception as e:
             st.error(f'Perhitungan gagal: {e}')
             return
 
     if 'groceries_last_result' not in st.session_state:
-        st.caption('Dataset default: 9.835 transaksi dan 169 jenis barang. Gunakan parameter bawaan untuk uji pertama.')
-        st.stop()
+        st.caption(
+            'Dataset default: 9.835 transaksi dan 169 jenis barang. '
+            'Gunakan parameter bawaan untuk uji pertama.'
+        )
+        return
+
 
     itemsets,rules,frequency,n_orders,n_items = st.session_state['groceries_last_result']
     s_prev,c_prev,l_prev = st.session_state['groceries_last_params']
