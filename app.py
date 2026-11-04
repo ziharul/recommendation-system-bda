@@ -436,12 +436,19 @@ html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {
 }
 
 
-/* Overview V6: graphical learning journey (no charts or extra data processing). */
+
+/* Overview V6: Learning Journey */
 .journey-shell {
-  background:linear-gradient(126deg,#FFFFFF 0%,#FBFCFF 52%,#F2F6FF 100%);
-  border:1px solid #DBE5F4;border-radius:22px;padding:27px 28px 22px;
-  box-shadow:0 9px 25px rgba(27,57,111,.06);margin:15px 0 30px;
-  overflow:hidden;max-width:100%;
+  background: linear-gradient(126deg,#FFFFFF 0%,#FBFCFF 52%,#F2F6FF 100%);
+  border: 1px solid #DBE5F4;
+  border-radius: 22px;
+  padding: 27px 28px 22px;
+  box-shadow: 0 9px 25px rgba(27,57,111,.06);
+  margin: 15px 0 30px;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 .journey-head {display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
 .journey-heading {font-size:1.12rem;font-weight:800;color:#1B3157;letter-spacing:-.025em;}
