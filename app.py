@@ -971,7 +971,33 @@ def render_apriori():
         if display.empty: st.info('Tidak ada aturan untuk parameter yang dipilih. Coba turunkan minimum confidence atau support.')
         else:
             show_table(display,'apriori_rules.csv')
-            chart_layout(px.bar(display.head(12),x='Lift',y='Jika membeli',color='Confidence',orientation='h',hover_data=['Maka membeli','Support'],title='Aturan dengan nilai lift terbesar'))
+            
+            graph = display.head(12).iloc[::-1].copy()
+            graph['Aturan'] = graph['Jika membeli'] + ' → ' + graph['Maka membeli']
+
+            fig = px.bar(
+                graph,
+                x='Lift',
+                y='Aturan',
+                color='Confidence',
+                orientation='h',
+                text='Lift',
+                hover_data=['Support', 'Confidence'],
+                title='Aturan dengan nilai lift terbesar'
+            )
+            
+            fig.update_yaxes(
+                categoryorder='array',
+                categoryarray=graph['Aturan'].tolist()
+            )
+
+            fig.update_traces(
+                texttemplate='%{text:.2f}',
+                textposition='outside'
+            )
+
+            chart_layout(fig, height=420)
+
     note('<b>Interpretasi:</b> support menunjukkan proporsi transaksi yang memuat kombinasi barang; confidence menunjukkan peluang barang konsekuen muncul saat anteseden muncul; lift &gt; 1 menunjukkan asosiasi positif relatif terhadap peluang dasarnya.')
 
 
