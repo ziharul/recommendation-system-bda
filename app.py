@@ -769,8 +769,10 @@ def render_overview():
         ),
     ]
 
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
     for start in range(0, len(modules), 2):
-        columns = st.columns(2, gap="large")
+        row_left_gutter, col_1, col_2, row_right_gutter = st.columns([0.05, 1, 1, 0.05], gap="large")
+        columns = [col_1, col_2]
         for col, module in zip(columns, modules[start:start+2]):
             with col:
                 with st.container(border=True):
