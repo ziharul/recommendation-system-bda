@@ -975,7 +975,7 @@ def render_apriori():
 
 
 def render_groceries():
-    hero('AKTIVITAS 02 · ASSOCIATION RULE', 'Market Basket Analysis — Groceries',
+    hero('AKTIVITAS 02 · ASSOCIATION RULE', 'Market Basket Analysis (Groceries)',
          'Eksplorasi transaksi belanja dan aturan Apriori menggunakan dataset Groceries berdasarkan materi.')
     section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     st.info('Mode aman: membuka halaman ini tidak otomatis menjalankan perhitungan. Atur parameter, lalu klik **Jalankan Analisis**.')
@@ -1081,7 +1081,7 @@ def render_content():
 
 
 def render_movie():
-    hero('AKTIVITAS 04 · CONTENT-BASED', 'Movie Recommendation — MovieLens', 'Rekomendasi film berdasarkan kemiripan genre dari dataset Movie.zip yang digunakan dalam materi.')
+    hero('AKTIVITAS 04 · CONTENT-BASED', 'Movie Recommendation (MovieLens)', 'Rekomendasi film berdasarkan kemiripan genre dari dataset Movie.zip yang digunakan dalam materi.')
     section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     up=st.file_uploader('Opsional: unggah CSV dengan kolom movieId, title, genres',type=['csv'],key='up_mov')
     if up:
@@ -1151,7 +1151,7 @@ def render_user_cf():
 
 
 def render_item_cf():
-    hero('AKTIVITAS 06 · COLLABORATIVE FILTERING', 'Item-Based kNN — Book-Crossing', 'Menemukan judul buku yang serupa dari pola rating pengguna menggunakan k-Nearest Neighbors dengan jarak cosine.')
+    hero('AKTIVITAS 06 · COLLABORATIVE FILTERING', 'Item-Based kNN (Book-Crossing)', 'Menemukan judul buku yang serupa dari pola rating pengguna menggunakan k-Nearest Neighbors dengan jarak cosine.')
     section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
     st.caption('Dataset siap pakai telah diproses dari tiga CSV dalam BX-Users.zip menggunakan filter yang tercantum di materi.')
     up=st.file_uploader('Opsional: unggah CSV siap olah dengan kolom userID, bookTitle, bookRating',type=['csv'],key='up_book')
