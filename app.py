@@ -263,6 +263,162 @@ h2 {margin-top:.45rem;}
  [class*="st-key-overview_"] button p{font-size:.82rem !important;}
 }
 
+
+/* V5 — Visual refresh: modern, spacious analytics UI.
+   Layout-only styles: no analytical logic, data loader, or module callbacks changed. */
+:root {
+ --page:#F5F7FC;--paper:#FFFFFF;--navy:#142342;--ink:#34445E;
+ --muted:#72809A;--line:#E2E9F3;--blue:#3563E9;--softblue:#EDF3FF;
+ --shadow:0 12px 32px rgba(25,50,99,.055);
+}
+html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {
+ background:radial-gradient(circle at 80% 5%,#EEF3FF 0,transparent 34%),var(--page);
+}
+[data-testid="stHeader"]{background:rgba(245,247,252,.88);backdrop-filter:blur(12px);}
+.block-container{max-width:1270px;padding:2rem clamp(1.3rem,3.1vw,3rem) 3.7rem;}
+
+/* Sidebar navigation keeps real gutters between active menu and both edges. */
+[data-testid="stSidebar"] {
+ min-width:331px;max-width:331px;
+ background:#FCFDFF;border-right:1px solid #E0E7F4;
+ box-shadow:6px 0 26px rgba(17,36,75,.025);
+}
+[data-testid="stSidebar"] > div:first-child {background:#FCFDFF;}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:.30rem;}
+[data-testid="stSidebar"] [class*="st-key-nav_"]{
+ width:calc(100% - 18px)!important;margin-left:9px!important;
+ margin-right:9px!important;margin-bottom:3px!important;
+}
+[data-testid="stSidebar"] .stButton > button{
+ min-height:44px;border-radius:11px;padding:.64rem .85rem!important;
+ color:#536681;gap:.62rem;font-weight:570;font-size:.84rem;
+ transition:background .16s ease,border-color .16s ease,box-shadow .16s ease;
+}
+[data-testid="stSidebar"] .stButton > button p{
+ font-size:.82rem;letter-spacing:-.006em;line-height:1.38;
+}
+[data-testid="stSidebar"] .stButton > button:hover{
+ background:#EFF4FF;color:#2854CD;border-color:#E1EAFB;
+ box-shadow:0 3px 10px rgba(53,99,233,.055);
+}
+.side-brand{margin:6px 7px 1px;padding:12px 4px 16px;gap:13px;}
+.brand-icon{width:46px;height:46px;border-radius:15px;
+ background:linear-gradient(145deg,#DCE9FF 0%,#ECF4FF 100%);
+ box-shadow:inset 0 0 0 1px #D2E2FF;}
+.brand-title{font-size:15px;font-weight:790;letter-spacing:-.02em;color:#182B51;}
+.brand-caption{font-size:11px;color:#8291A9;}
+.side-rule{background:linear-gradient(90deg,#E6ECF5,#CFDDF2,#E6ECF5);margin:5px 8px 9px;}
+.side-section{color:#8B9BB5;font-size:10px;font-weight:800;
+ letter-spacing:.105em;margin:16px 0 7px 17px;}
+.side-footer{
+ margin:22px 9px 10px;padding:16px 12px 12px;
+ border-top:1px solid #E1E9F5;border-radius:0;color:#8291A6;
+}
+.side-footer strong{color:#253E67;}
+
+/* Editorial-style headers with a high-contrast visual focal point. */
+.hero{
+ position:relative;isolation:isolate;overflow:hidden;
+ background:linear-gradient(110deg,#132544 2%,#1A3767 55%,#2755A2 100%);
+ border:1px solid rgba(107,154,242,.24);border-radius:22px;
+ padding:34px 38px;box-shadow:0 18px 34px rgba(23,47,91,.16);
+ margin-bottom:23px;
+}
+.hero::after{content:'';position:absolute;z-index:-1;width:300px;height:300px;
+ border-radius:50%;right:-110px;top:-155px;background:rgba(109,157,255,.16);}
+.hero h1{color:#FFFFFF!important;font-size:2.13rem;line-height:1.16;margin-bottom:11px;}
+.hero p{color:#CAD8EF;font-size:1rem;max-width:760px;line-height:1.68;}
+.hero .eyebrow{color:#A9C6FF;font-size:11px;letter-spacing:.115em;margin-bottom:12px;}
+.hero-overview{padding:43px 44px 40px;min-height:300px;display:flex;align-items:center;
+ justify-content:space-between;gap:22px;background:linear-gradient(117deg,#101F3B 0%,#173365 55%,#2B58AE 100%);}
+.hero-overview::before{content:'';position:absolute;z-index:-1;inset:0;
+ background:radial-gradient(circle at 80% 60%,rgba(117,159,255,.19),transparent 35%);}
+.hero-overview-copy{position:relative;max-width:620px;z-index:2;}
+.hero-overview h1{font-size:clamp(2.25rem,3.55vw,3.1rem);line-height:1.1;
+ letter-spacing:-.045em;max-width:550px;margin:14px 0;}
+.hero-overview h1 span{color:#A6C4FF;}
+.hero-overview p{font-size:.99rem;max-width:570px;line-height:1.67;margin:0;}
+.hero-pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;
+ padding:7px 12px;background:rgba(153,188,255,.12);border:1px solid rgba(189,211,255,.24);
+ color:#DAE8FF;font-weight:730;font-size:.69rem;letter-spacing:.08em;}
+.hero-dot{width:6px;height:6px;background:#72E8C3;border-radius:50%;box-shadow:0 0 0 4px rgba(114,232,195,.12);}
+.hero-overview-foot{margin-top:21px;display:flex;gap:10px;flex-wrap:wrap;}
+.hero-overview-foot span{font-size:.76rem;color:#DFE9FB;border:1px solid rgba(180,206,255,.18);
+ padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.045);}
+.hero-illustration{width:270px;height:235px;flex:none;position:relative;display:flex;align-items:center;justify-content:center;}
+.hero-orbit{width:218px;height:218px;border:1px solid rgba(167,196,255,.24);
+ border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;}
+.hero-orbit::before{content:'';position:absolute;inset:22px;border:1px dashed rgba(194,215,255,.26);border-radius:50%;}
+.hero-orbit::after{content:'';position:absolute;inset:46px;border:1px solid rgba(210,226,255,.17);border-radius:50%;}
+.hero-core{height:91px;width:91px;border-radius:25px;
+ background:linear-gradient(148deg,#7D9FFF,#4B75E6);display:flex;align-items:center;justify-content:center;
+ box-shadow:0 12px 30px rgba(11,27,71,.25),inset 0 1px 0 rgba(255,255,255,.37);z-index:1;}
+.hero-satellite{position:absolute;width:39px;height:39px;border-radius:12px;
+ display:flex;align-items:center;justify-content:center;color:white;
+ border:1px solid rgba(219,233,255,.22);box-shadow:0 9px 18px rgba(9,29,65,.21);}
+.hero-satellite.s1{top:12px;left:28px;background:#436FE6;}
+.hero-satellite.s2{right:1px;top:75px;background:#20A7AB;}
+.hero-satellite.s3{bottom:15px;left:34px;background:#7C60D4;}
+.hero-satellite svg,.hero-core svg{display:block;}
+
+/* Clear information hierarchy and less generic native card styling. */
+.section-head{margin:27px 0 14px;}
+.section-kicker{font-size:11px;color:#4168C8;font-weight:800;letter-spacing:.09em;}
+.section-title{font-size:1.65rem;color:#182B51;font-weight:790;letter-spacing:-.03em;}
+.section-desc{color:#6D7F98;font-size:.96rem;max-width:820px;}
+[data-testid="stMetric"]{
+ background:#FFF;border:1px solid #E0E8F4;border-radius:16px;
+ box-shadow:0 7px 22px rgba(27,53,99,.045);padding:22px 25px;min-height:115px;
+}
+[data-testid="stMetric"]:nth-of-type(even){background:#FFF;}
+[data-testid="stMetricLabel"] p{font-size:.9rem!important;color:#71819B!important;}
+[data-testid="stMetricValue"]{font-size:2.12rem;color:#1D355E;}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.module-top){
+ border-radius:19px;box-shadow:0 10px 27px rgba(24,49,102,.065);
+ background:#FFF;transition:box-shadow .16s ease,transform .16s ease;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.module-top):hover{
+ box-shadow:0 16px 35px rgba(24,49,102,.105);transform:translateY(-2px);
+}
+.module-top{margin-bottom:16px;}
+.module-icon{width:49px;height:49px;border-radius:14px;font-size:23px;}
+.module-index{font-size:10px;background:#F6F8FC;border-color:#E6EDF7;color:#7D8FA9;}
+.module-title{font-size:1.3rem;font-weight:790;letter-spacing:-.025em;margin:0 0 9px;}
+.module-desc{font-size:.96rem;line-height:1.66;color:#63738B;margin-bottom:18px;}
+.module-divider{background:#E9EFF7;margin:15px 0;}
+.module-label{color:#334969;font-size:.83rem;}
+.module-study{font-size:.92rem;color:#566B88;line-height:1.57;margin:5px 0 15px;}
+.module-outcome{border-radius:13px;margin:10px 0 13px;padding:15px 18px;}
+.module-outcome-label{font-size:.64rem;letter-spacing:.08em;}
+.module-outcome-text{font-size:.93rem;}
+.module-foot{font-size:.77rem;color:#7D8DA7;}
+[class*="st-key-overview_"] button{
+ min-height:41px;border-radius:10px;font-weight:730;
+ transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease;
+}
+[class*="st-key-overview_"] button:hover{transform:translateY(-1px);box-shadow:0 7px 14px rgba(42,77,138,.08);}
+.workflow-card{border-radius:18px;padding:24px 27px;box-shadow:0 8px 22px rgba(27,53,99,.05);}
+.workflow-step{border-radius:11px;background:#F1F5FD;border-color:#DBE5F6;color:#37558D;}
+[data-testid="stForm"]{border-radius:17px;box-shadow:0 7px 20px rgba(26,49,91,.045);}
+[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
+ background:#E8EFFF;color:#2655CE;border:1px solid #C7D9FD;
+}
+[data-testid="stPlotlyChart"]{border-radius:15px;}
+@media(max-width:1100px){
+ .hero-overview{padding:32px 32px;min-height:250px;}
+ .hero-illustration{width:190px;height:190px;transform:scale(.78);transform-origin:center;}
+}
+@media(max-width:750px){
+ [data-testid="stSidebar"]{min-width:292px;max-width:315px;}
+ .block-container{padding:1.2rem 1.05rem 2.2rem;}
+ .hero,.hero-overview{padding:27px 24px;border-radius:17px;}
+ .hero-overview{min-height:unset;}
+ .hero-overview h1{font-size:2.18rem;}
+ .hero-illustration{display:none;}
+ .hero h1{font-size:1.79rem;}
+ .section-title{font-size:1.36rem;}
+}
+
 </style>
 ''', unsafe_allow_html=True)
 
@@ -330,9 +486,10 @@ with st.sidebar:
     selected_key = NAV_KEYS[NAV.index(st.session_state["active_page"])]
     st.markdown(f'''<style>
     [data-testid="stSidebar"] .st-key-nav_{selected_key} button {{
-        background:#EAF1FF !important;color:#1D4ED8 !important;
-        border:1px solid #D9E7FF !important;font-weight:700 !important;
-        box-shadow:inset 3px 0 0 #2563EB;
+        background:linear-gradient(105deg,#E5EEFF,#F0F5FF) !important;
+        color:#2353CC !important;border:1px solid #CCDDFD !important;
+        font-weight:750 !important;
+        box-shadow:inset 3px 0 0 #3563E9,0 5px 12px rgba(34,83,181,.08);
     }}
     [data-testid="stSidebar"] .st-key-nav_{selected_key} button p {{color:#1D4ED8 !important;font-weight:700 !important;}}
     </style>''', unsafe_allow_html=True)
@@ -541,11 +698,34 @@ def prep_books():
 
 
 def render_overview():
-    hero(
-        "BIG DATA ANALYTICS · MMT ITS", "Recommendation System",
-        "Platform pembelajaran interaktif untuk memahami dan mengeksplorasi berbagai metode "
-        "Recommendation System berdasarkan materi Big Data Analytics."
-    )
+    st.markdown('''<div class="hero hero-overview">
+      <div class="hero-overview-copy">
+        <div class="hero-pill"><span class="hero-dot"></span> BIG DATA ANALYTICS · MMT ITS</div>
+        <h1>Build insights with<br><span>Recommendation Systems</span></h1>
+        <p>Laboratorium pembelajaran interaktif untuk memahami metode sistem rekomendasi,
+        mengeksplorasi data, dan membandingkan hasil analisis melalui tujuh aktivitas praktik.</p>
+        <div class="hero-overview-foot">
+          <span>Association Rules</span><span>Content-Based</span>
+          <span>Collaborative</span><span>Hybrid</span>
+        </div>
+      </div>
+      <div class="hero-illustration" aria-hidden="true">
+        <div class="hero-orbit">
+          <div class="hero-core">
+            <svg width="51" height="51" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M13 15L25 10L39 19L33 36L17 40L13 15Z" stroke="white" stroke-width="2.4" stroke-linejoin="round" opacity=".8"/>
+              <path d="M13 15L28 25L39 19M28 25L33 36L17 40L13 15" stroke="white" stroke-width="1.7" opacity=".65"/>
+              <circle cx="13" cy="15" r="4" fill="white"/><circle cx="25" cy="10" r="4" fill="white"/>
+              <circle cx="39" cy="19" r="4" fill="white"/><circle cx="28" cy="25" r="5" fill="#B6F3E8"/>
+              <circle cx="33" cy="36" r="4" fill="white"/><circle cx="17" cy="40" r="4" fill="white"/>
+            </svg>
+          </div>
+        </div>
+        <div class="hero-satellite s1"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"><path d="M4 19V10M10 19V5M16 19v-8M22 19V8"/></svg></div>
+        <div class="hero-satellite s2"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="12" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M8 11l8-4M8 13l8 4"/></svg></div>
+        <div class="hero-satellite s3"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"><path d="M4 13l5-5 4 4 7-7M16 5h4v4"/></svg></div>
+      </div>
+    </div>''', unsafe_allow_html=True)
     metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
     st.markdown('''<div class="section-head">
       <div class="section-kicker">EXPLORE OUR MODULES</div>
@@ -595,7 +775,7 @@ def render_overview():
             with col:
                 with st.container(border=True):
                     st.markdown(f'''
-                    <div class="module-top" style="border-top:3px solid {module['color']};padding-top:12px">
+                    <div class="module-top" style="border-top:3px solid {module['color']};padding-top:17px">
                       <div class="module-icon" style="background:{module['bg']};color:{module['color']}">{module['mark']}</div>
                       <div class="module-index">MODULE {module['no']} / 04</div>
                     </div>
