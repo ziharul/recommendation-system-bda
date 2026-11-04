@@ -798,43 +798,47 @@ def render_overview():
                             st.button(name, key=f"overview_{idx}", icon=":material/arrow_forward:",
                                       use_container_width=True, on_click=select_nav, args=(idx,))
 
-    st.markdown('''<div class="section-head">
-      <div class="section-kicker">FROM DATA TO INSIGHT</div>
-      <div class="section-title">How Recommendation Systems Work</div>
-      <div class="section-desc">Tahapan umum analisis. Penerapannya menyesuaikan metode dan karakteristik dataset.</div>
-    </div>
-    <div class="workflow-card">
-      <div class="workflow-title">Alur Pembelajaran dan Analisis</div>
-      <div class="workflow-line">
-        <span class="workflow-step">Dataset</span>
-        <span class="workflow-step">Persiapan Data</span>
-        <span class="workflow-step">Pemilihan Metode</span>
-        <span class="workflow-step">Analisis Hasil</span>
-        <span class="workflow-step">Rekomendasi</span>
-      </div>
-    </div>''', unsafe_allow_html=True)
+    # Overview lower sections share the same left/right alignment as the module cards.
+    # Side gutters apply only here; other pages retain their original layout.
+    overview_left, overview_content, overview_right = st.columns([0.05, 2, 0.05], gap="large")
+    with overview_content:
+        st.markdown('''<div class="section-head">
+          <div class="section-kicker">FROM DATA TO INSIGHT</div>
+          <div class="section-title">How Recommendation Systems Work</div>
+          <div class="section-desc">Tahapan umum analisis. Penerapannya menyesuaikan metode dan karakteristik dataset.</div>
+        </div>
+        <div class="workflow-card">
+          <div class="workflow-title">Alur Pembelajaran dan Analisis</div>
+          <div class="workflow-line">
+            <span class="workflow-step">Dataset</span>
+            <span class="workflow-step">Persiapan Data</span>
+            <span class="workflow-step">Pemilihan Metode</span>
+            <span class="workflow-step">Analisis Hasil</span>
+            <span class="workflow-step">Rekomendasi</span>
+          </div>
+        </div>''', unsafe_allow_html=True)
 
-    st.markdown('''<div class="section-head">
-      <div class="section-kicker">DATA SOURCES</div>
-      <div class="section-title">Informasi Dataset</div>
-      <div class="section-desc">Ringkasan data yang digunakan pada masing-masing aktivitas praktik.</div>
-    </div>''', unsafe_allow_html=True)
-    groceries = groceries_raw()
-    movies = movies_raw()
-    books = book_interactions()
-    dataset_info = pd.DataFrame([
-        ["Apriori contoh", "Data transaksi pada materi", 5, "Transaksi sederhana"],
-        ["Groceries", "groceries.csv", len(groceries), "Baris transaksi"],
-        ["MovieLens", "movie.csv", len(movies), "Film"],
-        ["MovieLens rating", "rating.csv", len(ratings_raw()), "Rating tambahan dalam arsip"],
-        ["Book-Crossing — data tersaring", "book_knn_interactions.csv.gz", len(books), "Interaksi rating terpilih"],
-        ["User-Based dan Hybrid", "Data contoh pada materi", len(EXAMPLE_RATINGS), "Baris rating contoh"],
-    ], columns=["Dataset", "Sumber", "Jumlah baris", "Keterangan"])
-    compact_dataframe(dataset_info, hide_index=True, use_container_width=True)
-    st.caption(
-        "File music.csv dan Online Retail.xlsx tersedia dalam paket materi, namun tidak dipakai langsung "
-        "oleh tujuh aktivitas yang ditampilkan."
-    )
+        st.markdown('''<div class="section-head">
+          <div class="section-kicker">DATA SOURCES</div>
+          <div class="section-title">Informasi Dataset</div>
+          <div class="section-desc">Ringkasan data yang digunakan pada masing-masing aktivitas praktik.</div>
+        </div>''', unsafe_allow_html=True)
+        groceries = groceries_raw()
+        movies = movies_raw()
+        books = book_interactions()
+        dataset_info = pd.DataFrame([
+            ["Apriori contoh", "Data transaksi pada materi", 5, "Transaksi sederhana"],
+            ["Groceries", "groceries.csv", len(groceries), "Baris transaksi"],
+            ["MovieLens", "movie.csv", len(movies), "Film"],
+            ["MovieLens rating", "rating.csv", len(ratings_raw()), "Rating tambahan dalam arsip"],
+            ["Book-Crossing — data tersaring", "book_knn_interactions.csv.gz", len(books), "Interaksi rating terpilih"],
+            ["User-Based dan Hybrid", "Data contoh pada materi", len(EXAMPLE_RATINGS), "Baris rating contoh"],
+        ], columns=["Dataset", "Sumber", "Jumlah baris", "Keterangan"])
+        compact_dataframe(dataset_info, hide_index=True, use_container_width=True)
+        st.caption(
+            "File music.csv dan Online Retail.xlsx tersedia dalam paket materi, namun tidak dipakai langsung "
+            "oleh tujuh aktivitas yang ditampilkan."
+        )
 
 def render_apriori():
     hero('AKTIVITAS 01 · ASSOCIATION RULE', 'Apriori pada transaksi contoh', 'Mencari kombinasi barang yang sering dibeli bersama menggunakan lima transaksi berdasarkan materi.')
