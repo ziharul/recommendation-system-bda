@@ -747,6 +747,71 @@ def render_overview():
     # Hanya Overview, sehingga layout tujuh aktivitas lain tidak berubah.
     with st.container(key="overview_content", border=False):
         metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
+        # Data Insights Preview: hanya membaca dataset lokal yang sudah dipakai modul.
+        # Dua kolom sejajar tanpa st.columns() tambahan di dalam kartu.
+        st.markdown('''<div class="section-head">
+          <div class="section-kicker">EXPLORE REAL DATA</div>
+          <div class="section-title">Data Insights Preview</div>
+          <div class="section-desc">Gambaran singkat isi dataset sebelum menjalankan analisis rekomendasi.</div>
+        </div>''', unsafe_allow_html=True)
+
+        insight_left, insight_right = st.columns(2, gap="large")
+        with insight_left:
+            with st.container(border=True, key="insight_groceries"):
+                st.markdown("**Barang yang Paling Sering Dibeli**")
+                st.caption("Groceries · 7 barang dengan transaksi terbanyak")
+                counts = Counter(
+                    item for transaction in transactions_from_frame(groceries_raw())
+                    for item in transaction
+                )
+                top_items = pd.Series(counts, dtype="int64").nlargest(7).sort_values()
+                if top_items.empty:
+                    st.info("Belum ada barang yang dapat ditampilkan.")
+                else:
+                    fig = go.Figure(go.Bar(
+                        x=top_items.values, y=top_items.index, orientation="h",
+                        marker=dict(color="#3563E9", line=dict(width=0)),
+                        hovertemplate="%{y}: %{x:,} transaksi<extra></extra>",
+                    ))
+                    fig.update_layout(
+                        height=320, margin=dict(l=5, r=16, t=8, b=20),
+                        paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
+                        font=dict(color="#475569", size=12),
+                        xaxis=dict(title=None, showgrid=True, gridcolor="#EDF2FA", zeroline=False),
+                        yaxis=dict(title=None, showgrid=False, automargin=True),
+                    )
+                    st.plotly_chart(fig, use_container_width=True,
+                                    config={"displayModeBar": False})
+                    st.caption("Jumlah transaksi yang mengandung setiap barang.")
+
+        with insight_right:
+            with st.container(border=True, key="insight_movies"):
+                st.markdown("**Genre Film Terpopuler**")
+                st.caption("MovieLens · 7 genre dengan koleksi film terbanyak")
+                genre_counts = (
+                    movies_raw()["genres"].dropna().str.split("|").explode()
+                    .loc[lambda series: series.ne("(no genres listed)")]
+                    .value_counts().head(7).sort_values()
+                )
+                if genre_counts.empty:
+                    st.info("Belum ada genre yang dapat ditampilkan.")
+                else:
+                    fig = go.Figure(go.Bar(
+                        x=genre_counts.values, y=genre_counts.index, orientation="h",
+                        marker=dict(color="#7C3AED", line=dict(width=0)),
+                        hovertemplate="%{y}: %{x:,} film<extra></extra>",
+                    ))
+                    fig.update_layout(
+                        height=320, margin=dict(l=5, r=16, t=8, b=20),
+                        paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
+                        font=dict(color="#475569", size=12),
+                        xaxis=dict(title=None, showgrid=True, gridcolor="#F1ECFC", zeroline=False),
+                        yaxis=dict(title=None, showgrid=False, automargin=True),
+                    )
+                    st.plotly_chart(fig, use_container_width=True,
+                                    config={"displayModeBar": False})
+                    st.caption("Satu film dapat dihitung pada lebih dari satu genre.")
+
         st.markdown('''<div class="section-head">
           <div class="section-kicker">EXPLORE OUR MODULES</div>
           <div class="section-title">Learning Modules</div>
