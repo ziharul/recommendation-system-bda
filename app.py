@@ -1110,6 +1110,7 @@ def render_movie():
         show_table(result,'movie_recommendations.csv')
         chart_layout(px.bar(result.head(12),x='Kesamaan genre',y='Film rekomendasi',orientation='h',title=f'Film paling mirip dengan {title}'),height=400)
     with tab2:
+        from collections import Counter
         counts=Counter(g.strip() for val in frame.genres.dropna() for g in str(val).split('|') if g.strip())
         top_genres=pd.DataFrame(counts.most_common(18),columns=['Genre','Jumlah film'])
         chart_layout(px.bar(top_genres,x='Jumlah film',y='Genre',orientation='h',title='18 genre paling umum'))
