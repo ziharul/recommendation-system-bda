@@ -427,6 +427,7 @@ html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {
   margin-left: auto;
   margin-right: auto;
   min-width: 0;
+  padding-top: 24px !important;
 }
 @media (max-width: 750px) {
   .st-key-overview_content {
