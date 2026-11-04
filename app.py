@@ -726,82 +726,82 @@ def render_overview():
         <div class="hero-satellite s3"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"><path d="M4 13l5-5 4 4 7-7M16 5h4v4"/></svg></div>
       </div>
     </div>''', unsafe_allow_html=True)
-    metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
-    st.markdown('''<div class="section-head">
-      <div class="section-kicker">EXPLORE OUR MODULES</div>
-      <div class="section-title">Learning Modules</div>
-      <div class="section-desc">Empat pendekatan utama untuk memahami cara kerja sistem rekomendasi.
-      Setiap modul menjelaskan tujuan pembelajaran, konsep yang digunakan, dan keluaran analisis.</div>
-    </div>''', unsafe_allow_html=True)
+    # Satu kontainer dengan gutter tetap: metrik, judul, kartu, dan tabel sejajar.
+    # Hero tetap selebar area utama; tata letak halaman selain Overview tidak berubah.
+    overview_left, overview_body, overview_right = st.columns([0.05, 2, 0.05], gap="large")
+    with overview_body:
+        metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
+        st.markdown('''<div class="section-head">
+          <div class="section-kicker">EXPLORE OUR MODULES</div>
+          <div class="section-title">Learning Modules</div>
+          <div class="section-desc">Empat pendekatan utama untuk memahami cara kerja sistem rekomendasi.
+          Setiap modul menjelaskan tujuan pembelajaran, konsep yang digunakan, dan keluaran analisis.</div>
+        </div>''', unsafe_allow_html=True)
 
-    modules = [
-        dict(
-            no="01", name="Association Rule Mining", mark="◆", color="#2563EB", bg="#EAF1FF",
-            outcome_bg="#EFF5FF", desc="Mempelajari cara menemukan keterkaitan antarbarang "
-            "dari riwayat transaksi, termasuk barang yang sering dibeli bersamaan.",
-            lessons="Apriori, frequent itemsets, support, confidence, dan lift.",
-            outcome="Pola pembelian dan aturan asosiasi", foot="2 aktivitas · Apriori & Market Basket",
-            actions=[(1,"Apriori"),(2,"Market Basket")],
-        ),
-        dict(
-            no="02", name="Content-Based Filtering", mark="▣", color="#7C3AED", bg="#F1ECFF",
-            outcome_bg="#F7F3FF", desc="Mempelajari bagaimana kesamaan isi dan karakteristik "
-            "item digunakan untuk merekomendasikan film yang memiliki ciri serupa.",
-            lessons="TF-IDF, cosine similarity, dan pemeringkatan kemiripan konten.",
-            outcome="Daftar rekomendasi film serupa", foot="2 aktivitas · Content-Based & Movie",
-            actions=[(3,"Content-Based"),(4,"Movie")],
-        ),
-        dict(
-            no="03", name="Collaborative Filtering", mark="◉", color="#059669", bg="#E7F8F0",
-            outcome_bg="#EEFAF4", desc="Mempelajari rekomendasi berdasarkan kesamaan "
-            "preferensi pengguna dan pola penilaian antaritem.",
-            lessons="User-Based Filtering serta Item-Based Filtering dengan kNN.",
-            outcome="Rekomendasi dari pola rating", foot="2 aktivitas · User-Based & Item-Based",
-            actions=[(5,"User-Based"),(6,"Item-Based")],
-        ),
-        dict(
-            no="04", name="Hybrid Recommendation", mark="◇", color="#EA580C", bg="#FFF0E5",
-            outcome_bg="#FFF7ED", desc="Mempelajari penggabungan rekomendasi "
-            "berbasis kesamaan konten dan preferensi pengguna agar keputusan memanfaatkan beberapa sumber informasi.",
-            lessons="Kombinasi skor Content-Based dan Collaborative, normalisasi, serta pembobotan.",
-            outcome="Rekomendasi gabungan dan pemeringkatan", foot="1 aktivitas · Hybrid Recommendation",
-            actions=[(7,"Hybrid Recommendation")],
-        ),
-    ]
+        modules = [
+            dict(
+                no="01", name="Association Rule Mining", mark="◆", color="#2563EB", bg="#EAF1FF",
+                outcome_bg="#EFF5FF", desc="Mempelajari cara menemukan keterkaitan antarbarang "
+                "dari riwayat transaksi, termasuk barang yang sering dibeli bersamaan.",
+                lessons="Apriori, frequent itemsets, support, confidence, dan lift.",
+                outcome="Pola pembelian dan aturan asosiasi", foot="2 aktivitas · Apriori & Market Basket",
+                actions=[(1,"Apriori"),(2,"Market Basket")],
+            ),
+            dict(
+                no="02", name="Content-Based Filtering", mark="▣", color="#7C3AED", bg="#F1ECFF",
+                outcome_bg="#F7F3FF", desc="Mempelajari bagaimana kesamaan isi dan karakteristik "
+                "item digunakan untuk merekomendasikan film yang memiliki ciri serupa.",
+                lessons="TF-IDF, cosine similarity, dan pemeringkatan kemiripan konten.",
+                outcome="Daftar rekomendasi film serupa", foot="2 aktivitas · Content-Based & Movie",
+                actions=[(3,"Content-Based"),(4,"Movie")],
+            ),
+            dict(
+                no="03", name="Collaborative Filtering", mark="◉", color="#059669", bg="#E7F8F0",
+                outcome_bg="#EEFAF4", desc="Mempelajari rekomendasi berdasarkan kesamaan "
+                "preferensi pengguna dan pola penilaian antaritem.",
+                lessons="User-Based Filtering serta Item-Based Filtering dengan kNN.",
+                outcome="Rekomendasi dari pola rating", foot="2 aktivitas · User-Based & Item-Based",
+                actions=[(5,"User-Based"),(6,"Item-Based")],
+            ),
+            dict(
+                no="04", name="Hybrid Recommendation", mark="◇", color="#EA580C", bg="#FFF0E5",
+                outcome_bg="#FFF7ED", desc="Mempelajari penggabungan rekomendasi "
+                "berbasis kesamaan konten dan preferensi pengguna agar keputusan memanfaatkan beberapa sumber informasi.",
+                lessons="Kombinasi skor Content-Based dan Collaborative, normalisasi, serta pembobotan.",
+                outcome="Rekomendasi gabungan dan pemeringkatan", foot="1 aktivitas · Hybrid Recommendation",
+                actions=[(7,"Hybrid Recommendation")],
+            ),
+        ]
 
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-    for start in range(0, len(modules), 2):
-        row_left_gutter, col_1, col_2, row_right_gutter = st.columns([0.05, 1, 1, 0.05], gap="large")
-        columns = [col_1, col_2]
-        for col, module in zip(columns, modules[start:start+2]):
-            with col:
-                with st.container(border=True):
-                    st.markdown(f'''
-                    <div class="module-top" style="border-top:3px solid {module['color']};padding-top:17px">
-                      <div class="module-icon" style="background:{module['bg']};color:{module['color']}">{module['mark']}</div>
-                      <div class="module-index">MODULE {module['no']} / 04</div>
-                    </div>
-                    <div class="module-title" style="color:{module['color']}">{module['name']}</div>
-                    <div class="module-desc">{module['desc']}</div>
-                    <div class="module-divider"></div>
-                    <div class="module-label">Yang dipelajari</div>
-                    <div class="module-study">{module['lessons']}</div>
-                    <div class="module-outcome" style="background:{module['outcome_bg']}">
-                      <div class="module-outcome-label">HASIL ANALISIS</div>
-                      <div class="module-outcome-text" style="color:{module['color']}">{module['outcome']}</div>
-                    </div>
-                    <div class="module-foot">{module['foot']}</div>
-                    ''', unsafe_allow_html=True)
-                    actions = st.columns(len(module["actions"]))
-                    for button_col, (idx, name) in zip(actions, module["actions"]):
-                        with button_col:
-                            st.button(name, key=f"overview_{idx}", icon=":material/arrow_forward:",
-                                      use_container_width=True, on_click=select_nav, args=(idx,))
+        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+        for start in range(0, len(modules), 2):
+            columns = st.columns(2, gap="large")
+            for col, module in zip(columns, modules[start:start+2]):
+                with col:
+                    with st.container(border=True):
+                        st.markdown(f'''
+                        <div class="module-top" style="border-top:3px solid {module['color']};padding-top:17px">
+                          <div class="module-icon" style="background:{module['bg']};color:{module['color']}">{module['mark']}</div>
+                          <div class="module-index">MODULE {module['no']} / 04</div>
+                        </div>
+                        <div class="module-title" style="color:{module['color']}">{module['name']}</div>
+                        <div class="module-desc">{module['desc']}</div>
+                        <div class="module-divider"></div>
+                        <div class="module-label">Yang dipelajari</div>
+                        <div class="module-study">{module['lessons']}</div>
+                        <div class="module-outcome" style="background:{module['outcome_bg']}">
+                          <div class="module-outcome-label">HASIL ANALISIS</div>
+                          <div class="module-outcome-text" style="color:{module['color']}">{module['outcome']}</div>
+                        </div>
+                        <div class="module-foot">{module['foot']}</div>
+                        ''', unsafe_allow_html=True)
+                        actions = st.columns(len(module["actions"]))
+                        for button_col, (idx, name) in zip(actions, module["actions"]):
+                            with button_col:
+                                st.button(name, key=f"overview_{idx}", icon=":material/arrow_forward:",
+                                          use_container_width=True, on_click=select_nav, args=(idx,))
 
-    # Overview lower sections share the same left/right alignment as the module cards.
-    # Side gutters apply only here; other pages retain their original layout.
-    overview_left, overview_content, overview_right = st.columns([0.05, 2, 0.05], gap="large")
-    with overview_content:
+
         st.markdown('''<div class="section-head">
           <div class="section-kicker">FROM DATA TO INSIGHT</div>
           <div class="section-title">How Recommendation Systems Work</div>
