@@ -669,13 +669,24 @@ def transactions_from_frame(frame):
     return [list(dict.fromkeys(str(x).strip() for x in row.dropna().tolist() if str(x).strip() and str(x).strip().lower() != 'nan')) for _,row in frame.iterrows() if row.notna().any()]
 
 
+def association_rules_inclusive(itemsets, minimum_confidence):
+    """Batas confidence bersifat inklusif, termasuk nilai tepat di ambang.
+
+    Misalnya 0.6 / 0.8 di floating-point menjadi 0.7499999999999999,
+    sehingga 75% bisa terbuang jika langsung dibandingkan dengan 0.75.
+    Toleransi numerik kecil ini mengatasi masalah tersebut.
+    """
+    threshold = max(0.0, float(minimum_confidence) - 1e-12)
+    return association_rules(itemsets, metric="confidence", min_threshold=threshold)
+
+
 def apriori_tables(transactions, minimum_support, minimum_confidence, maximum_length=None):
     encoder=TransactionEncoder()
     encoded = encoder.fit(transactions).transform(transactions)
     basket = pd.DataFrame(encoded, columns=encoder.columns_)
     itemsets = apriori(basket, min_support=minimum_support, use_colnames=True, max_len=maximum_length)
     if len(itemsets):
-        rules = association_rules(itemsets, metric="confidence", min_threshold=minimum_confidence)
+        rules = association_rules_inclusive(itemsets, minimum_confidence)
     else:
         rules = pd.DataFrame()
     return itemsets, rules, basket
@@ -698,7 +709,7 @@ def run_groceries(support, confidence, max_len, uploaded_bytes=None):
         raise ValueError("Dataset memiliki lebih dari 300 jenis barang. Saring dahulu item yang jarang muncul.")
     itemsets = apriori(basket, min_support=support, use_colnames=True,
                       max_len=max_len, low_memory=True)
-    rules = association_rules(itemsets, metric="confidence", min_threshold=confidence) if len(itemsets) else pd.DataFrame()
+    rules = association_rules_inclusive(itemsets, confidence) if len(itemsets) else pd.DataFrame()
     freq = basket.sum().sort_values(ascending=False)
     return itemsets, rules, freq, len(transactions), basket.shape[1]
 
