@@ -608,6 +608,18 @@ def compact_dataframe(df, height=None, **kwargs):
     st.dataframe(df, height=actual, **kwargs)
 
 
+def explain_result(title, meaning, breakdown=None):
+    """Penjelasan ringkas yang selalu terlihat + rincian hitung opsional.
+
+    Data dan angka pada rincian dikirim oleh aktivitas yang sedang ditampilkan,
+    sehingga contoh berubah saat input, parameter, atau dataset diubah.
+    """
+    st.markdown(f"**Memahami hasil — {title}.** {meaning}")
+    if breakdown:
+        with st.expander("Dari mana angka ini? Lihat langkah perhitungannya", expanded=False):
+            st.markdown(breakdown)
+
+
 def section_heading(kicker, heading, description=""):
     """A single typographic hierarchy for all analysis activities."""
     st.markdown(
@@ -819,6 +831,9 @@ def render_overview():
     # Hanya Overview, sehingga layout tujuh aktivitas lain tidak berubah.
     with st.container(key="overview_content", border=False):
         metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
+        st.caption('Empat modul adalah kelompok metode: Association Rules, Content-Based, '
+                   'Collaborative Filtering, dan Hybrid. Tujuh aktivitas adalah halaman praktik '
+                   'Apriori, Market Basket, Content-Based, Movie, User-Based, Item-Based, dan Hybrid.')
         st.markdown('''<div class="section-head">
           <div class="section-kicker">EXPLORE OUR MODULES</div>
           <div class="section-title">Learning Modules</div>
@@ -950,6 +965,13 @@ def render_overview():
             ["User-Based dan Hybrid", "Data contoh pada materi", len(EXAMPLE_RATINGS), "Baris rating contoh"],
         ], columns=["Dataset", "Sumber", "Jumlah baris", "Keterangan"])
         compact_dataframe(dataset_info, hide_index=True, use_container_width=True)
+        explain_result('jumlah baris dataset',
+            'Jumlah baris dihitung langsung dari file CSV atau data contoh yang digunakan, '
+            'sebelum filter khusus masing-masing algoritma. Jumlah film valid, buku unik, '
+            'atau jumlah transaksi yang dihitung dapat berbeda setelah proses penyaringan.',
+            'Contoh: satu baris pada `rating.csv` berarti satu catatan rating, '
+            'sedangkan satu baris pada `movie.csv` berarti satu film. '
+            'Interaksi rating buku tidak sama dengan jumlah judul buku unik.')
         st.caption(
             "File music.csv dan Online Retail.xlsx tersedia dalam paket materi, namun tidak dipakai langsung "
             "oleh tujuh aktivitas yang ditampilkan."
@@ -974,9 +996,36 @@ def render_apriori():
     with t1:
         compact_dataframe(pd.DataFrame({'Transaksi':[i+1 for i in range(len(tx))], 'Isi keranjang':[', '.join(t) for t in tx]}), hide_index=True,use_container_width=True)
         compact_dataframe(basket.head(15),use_container_width=True)
+        explain_result(
+            'data transaksi dan tabel 0/1',
+            f'Terdapat **{len(tx)} transaksi** dan **{basket.shape[1]} jenis barang unik**. '
+            'Satu baris mewakili satu keranjang; True berarti barang tersebut ada di keranjang, '
+            'False berarti tidak ada.',
+            'Kolom tiap barang dibuat dari seluruh nama barang unik yang muncul. '
+            'Tabel True/False inilah yang dihitung algoritma Apriori untuk mencari barang '
+            'yang sering dibeli bersama.'
+        )
     with t2:
         st.markdown('Kombinasi barang yang memiliki nilai support ≥ batas pilihan.')
         show_table(pretty_itemsets(itemsets),'apriori_frequent_itemsets.csv')
+        if not itemsets.empty:
+            chosen_item = itemsets.sort_values('support', ascending=False).iloc[0]
+            goods = sorted(chosen_item['itemsets'])
+            appearances = int(basket[goods].all(axis=1).sum())
+            explain_result(
+                'frequent itemsets',
+                f'Setiap baris merupakan barang atau kombinasi barang yang muncul pada '
+                f'setidaknya **{support:.0%} dari {len(tx)} transaksi**. Angka support adalah '
+                'frekuensi kemunculan bersama dibagi jumlah seluruh transaksi.',
+                f'**Contoh dari hasil saat ini: {", ".join(goods)}**. '
+                f'Kombinasi ini ditemukan pada **{appearances} dari {len(tx)} transaksi**.  '
+                f'\n\nSupport = {appearances} ÷ {len(tx)} = **{chosen_item["support"]:.4f}** '
+                f'({chosen_item["support"]:.1%}). Hasilnya memenuhi batas support {support:.0%}.'
+            )
+        else:
+            explain_result('frequent itemsets',
+                f'Tidak ada kombinasi yang mencapai minimum support **{support:.0%}**. '
+                'Turunkan batas support untuk menampilkan lebih banyak kombinasi.')
     with t3:
         display=pretty_rules(rules)
         if display.empty: st.info('Tidak ada aturan untuk parameter yang dipilih. Coba turunkan minimum confidence atau support.')
@@ -1008,6 +1057,34 @@ def render_apriori():
             )
 
             chart_layout(fig, height=420)
+            example = rules.sort_values(['lift','confidence'],ascending=False).iloc[0]
+            a_items = sorted(example['antecedents'])
+            b_items = sorted(example['consequents'])
+            a_n = int(basket[a_items].all(axis=1).sum())
+            b_n = int(basket[b_items].all(axis=1).sum())
+            ab_n = int(basket[a_items+b_items].all(axis=1).sum())
+            explain_result(
+                'support, confidence, dan lift',
+                f'Aturan **{", ".join(a_items)} → {", ".join(b_items)}** '
+                f'memiliki support **{example["support"]:.3f}**, confidence '
+                f'**{example["confidence"]:.3f}**, dan lift **{example["lift"]:.3f}**. '
+                'Lift lebih dari 1 menunjukkan asosiasi positif; bukan hubungan sebab-akibat.',
+                f'**Perhitungan dari {len(tx)} transaksi yang sedang digunakan:**\n\n'
+                f'- Transaksi yang memuat {", ".join(a_items)}: **{a_n}**.\n'
+                f'- Transaksi yang memuat {", ".join(b_items)}: **{b_n}**.\n'
+                f'- Transaksi yang memuat keduanya: **{ab_n}**.\n\n'
+                f'**Support** = {ab_n} ÷ {len(tx)} = **{example["support"]:.4f}**.\n\n'
+                f'**Confidence** = {ab_n} ÷ {a_n} = **{example["confidence"]:.4f}**. '
+                f'Artinya, dari {a_n} transaksi yang memuat barang pertama, '
+                f'{ab_n} juga memuat barang kedua.\n\n'
+                f'**Lift** = ({ab_n} ÷ {a_n}) ÷ ({b_n} ÷ {len(tx)}) '
+                f'= **{example["lift"]:.4f}**. Nilai ini membandingkan '
+                'confidence dengan frekuensi dasar barang yang disarankan.'
+            )
+        if display.empty:
+            explain_result('aturan asosiasi',
+                f'Tidak ada aturan yang memenuhi confidence **{confidence:.0%}** '
+                f'dan support **{support:.0%}** sekaligus. Ini bukan kesalahan perhitungan.')
 
     note('<b>Interpretasi:</b> support menunjukkan proporsi transaksi yang memuat kombinasi barang; confidence menunjukkan peluang barang konsekuen muncul saat anteseden muncul; lift &gt; 1 menunjukkan asosiasi positif relatif terhadap peluang dasarnya.')
 
@@ -1108,6 +1185,19 @@ def render_groceries():
         top=frequency.head(15).rename_axis('Barang').reset_index(name='Frekuensi')
         chart_layout(px.bar(top,x='Frekuensi',y='Barang',orientation='h',title='15 jenis barang paling sering muncul'))
         compact_dataframe(top,hide_index=True,use_container_width=True)
+        if not top.empty:
+            first=top.iloc[0]
+            explain_result(
+                'frekuensi barang',
+                f'**{first["Barang"]}** muncul dalam **{int(first["Frekuensi"]):,} dari '
+                f'{n_orders:,} transaksi** ({int(first["Frekuensi"])/n_orders:.1%}). '
+                'Grafik menghitung jumlah keranjang yang memuat barang, bukan jumlah unit yang dibeli.',
+                f'Sumber: kolom hasil pengodean transaksi.\n\n'
+                f'Frekuensi = jumlah baris transaksi yang memuat **{first["Barang"]}** '
+                f'= **{int(first["Frekuensi"]):,}**.\n\n'
+                f'Proporsi = {int(first["Frekuensi"]):,} ÷ {n_orders:,} '
+                f'= **{int(first["Frekuensi"])/n_orders:.2%}**.'
+            )
     with t2:
         display=pretty_rules(rules)
         if display.empty:
@@ -1118,6 +1208,34 @@ def render_groceries():
             chart_layout(px.scatter(graph,x='Support',y='Confidence',size='Lift',
                                     hover_data=['Jika membeli','Maka membeli'],
                                     title='Pola support–confidence–lift'))
+            example=rules.sort_values(['lift','confidence'],ascending=False).iloc[0]
+            ante=', '.join(sorted(example['antecedents']))
+            cons=', '.join(sorted(example['consequents']))
+            together=round(float(example['support'])*n_orders)
+            antecedent=round(together/float(example['confidence'])) if example['confidence'] else 0
+            consequent=round(n_orders*float(example['confidence'])/float(example['lift'])) if example['lift'] else 0
+            explain_result(
+                'aturan asosiasi Groceries',
+                f'Contoh aturan **{ante} → {cons}**: support **{example["support"]:.4f}**, '
+                f'confidence **{example["confidence"]:.1%}**, lift **{example["lift"]:.2f}**. '
+                'Di grafik, sumbu horizontal menunjukkan support, vertikal confidence, '
+                'dan ukuran lingkaran mewakili lift.',
+                f'Angka jumlah transaksi berikut direkonstruksi dari skor penuh dan '
+                f'jumlah transaksi **{n_orders:,}** (dibulatkan ke bilangan bulat):\n\n'
+                f'- Mengandung kedua sisi aturan: **{together:,} transaksi**.\n'
+                f'- Mengandung sisi awal ({ante}): **{antecedent:,} transaksi**.\n'
+                f'- Mengandung sisi akhir ({cons}): **{consequent:,} transaksi**.\n\n'
+                f'**Support** ≈ {together:,} ÷ {n_orders:,} = {example["support"]:.4f}.\n\n'
+                f'**Confidence** ≈ {together:,} ÷ {antecedent:,} = {example["confidence"]:.4f}.\n\n'
+                f'**Lift** = confidence ÷ (frekuensi barang hasil ÷ total transaksi) '
+                f'= **{example["lift"]:.4f}**.\n\n'
+                f'Hanya aturan dengan support ≥ **{s_prev:.3f}** dan confidence ≥ '
+                f'**{c_prev:.2f}** yang dimasukkan.'
+            )
+        if display.empty:
+            explain_result('aturan asosiasi Groceries',
+                f'Tidak ada kombinasi yang melewati kedua ambang: support **{s_prev:.3f}** '
+                f'dan confidence **{c_prev:.2f}**.')
     with t3:
         display=pretty_rules(rules)
         prod=st.selectbox('Pilih barang',list(frequency.index),key='target_g')
@@ -1127,8 +1245,21 @@ def render_groceries():
         else:
             col='Maka membeli' if direction.startswith('Barang yang disarankan') else 'Jika membeli'
             filtered=display[display[col].apply(lambda s:prod in [x.strip() for x in s.split(',')])]
-            if len(filtered):show_table(filtered.head(30),'aturan_barang_spesifik.csv')
-            else:st.info('Tidak ditemukan aturan untuk barang tersebut pada parameter saat ini.')
+            if len(filtered):
+                show_table(filtered.head(30),'aturan_barang_spesifik.csv')
+                explain_result('filter aturan untuk barang tertentu',
+                    f'**{len(filtered)} aturan** memuat **{prod}** sebagai '
+                    f'{"barang yang disarankan" if direction.startswith("Barang yang disarankan") else "barang yang sudah dipilih"}. '
+                    'Artinya filter memeriksa posisi barang dalam aturan, bukan menghitung ulang Apriori.',
+                    'RHS (kanan tanda →) adalah barang yang mungkin ikut dibeli. '
+                    'LHS (kiri tanda →) adalah barang awal yang sudah ada di keranjang. '
+                    f'Aturan yang ditampilkan tetap mengikuti batas support {s_prev:.3f} '
+                    f'dan confidence {c_prev:.2f}.')
+            else:
+                st.info('Tidak ditemukan aturan untuk barang tersebut pada parameter saat ini.')
+                explain_result('filter aturan untuk barang tertentu',
+                    f'Tidak ada aturan dengan **{prod}** di posisi yang dipilih '
+                    f'dan melewati ambang support {s_prev:.3f} / confidence {c_prev:.2f}.')
     note('Dataset yang digunakan adalah CSV Groceries dalam materi. Batas panjang kombinasi 2 atau 3 diterapkan untuk mencegah aplikasi kehabisan memori; karena itu jumlah aturan mungkin berbeda dari pengolahan tanpa batas di R.')
 
 
@@ -1158,11 +1289,47 @@ def render_content():
     with t1:
         show_table(result,'content_based_rekomendasi.csv')
         chart_layout(px.bar(result,x='Kemiripan',y='Film rekomendasi',orientation='h',title=f'Film mirip dengan {title}'))
+        if not result.empty:
+            row = result.iloc[0]
+            film2 = str(row['Film rekomendasi'])
+            j = int(df.index[df.Judul == film2][0])
+            score = float(row['Kemiripan'])
+            common = sorted(set(re.findall(r'[a-zA-Z]{3,}', str(df.loc[idx, 'Deskripsi']).lower())) &
+                            set(re.findall(r'[a-zA-Z]{3,}', str(df.loc[j, 'Deskripsi']).lower())))
+            overlap = ', '.join(common[:8]) if common else 'tidak ada kata identik yang menonjol'
+            explain_result(
+                'kemiripan deskripsi film',
+                f'**{film2}** memperoleh skor **{score:.4f}** terhadap film acuan '
+                f'**{title}**. Semakin mendekati 1, representasi isi deskripsinya '
+                'semakin mirip; skor bukan rating atau persentase peluang suka.',
+                f'**Asal skor:** deskripsi tiap film diubah menjadi bobot kata menggunakan '
+                f'TF-IDF. Kemudian dihitung cosine similarity antara vektor film '
+                f'**{title}** dan **{film2}**.\n\n'
+                f'Karena vektor TF-IDF dinormalisasi otomatis ke panjang 1, '
+                f'hasil perkalian titik kedua vektor sama dengan cosine similarity '
+                f'= **{float(matrix[idx].multiply(matrix[j]).sum()):.4f}**.\n\n'
+                f'Contoh kata yang sama pada deskripsi mentah: **{overlap}**. '
+                'Namun skor sesungguhnya ditentukan oleh seluruh bobot TF-IDF, '
+                'bukan sekadar menghitung jumlah kata sama.'
+            )
     with t2:
         if len(df)<=30:
             chart_layout(px.imshow(similarity,x=df.Judul.tolist(),y=df.Judul.tolist(),zmin=0,zmax=1,aspect='auto',title='Cosine similarity antarfilm'),height=390)
         else: st.info('Matriks heatmap dibatasi untuk maksimal 30 film; rekomendasi tetap diproses.')
-    with t3: compact_dataframe(df,use_container_width=True,hide_index=True)
+        explain_result('matriks kemiripan',
+            f'Matriks membandingkan **{len(df)} film** dengan film lain. '
+            'Sel diagonal bernilai 1 karena membandingkan film dengan dirinya sendiri. '
+            'Warna sel menunjukkan besar-kecilnya kemiripan konten.',
+            'Baris menunjukkan film acuan dan kolom menunjukkan film pembanding. '
+            'Nilai diperoleh dari cosine similarity dua vektor TF-IDF. '
+            'Hasil A–B dan B–A sama (matriks simetris).')
+    with t3:
+        compact_dataframe(df,use_container_width=True,hide_index=True)
+        explain_result('data deskripsi',
+            f'Ada **{len(df)} judul unik** sesudah baris kosong dan judul duplikat dibuang. '
+            f'TF-IDF menghasilkan **{matrix.shape[1]} istilah** dari deskripsi yang tersedia.',
+            'Istilah TF-IDF adalah kata hasil proses vektorisasi, bukan jumlah film. '
+            'Kata umum bahasa Inggris dapat diabaikan oleh pengaturan stop_words.')
     note('TF-IDF mengubah deskripsi menjadi representasi angka, lalu cosine similarity mengukur kedekatan konten. Skor tinggi berarti deskripsi lebih mirip, bukan jaminan film akan disukai pengguna.')
 
 
@@ -1194,12 +1361,42 @@ def render_movie():
     with tab1:
         show_table(result,'movie_recommendations.csv')
         chart_layout(px.bar(result.head(12),x='Kesamaan genre',y='Film rekomendasi',orientation='h',title=f'Film paling mirip dengan {title}'),height=400)
+        if not result.empty:
+            first=result.iloc[0]
+            srcgenres=set(str(frame.loc[ix,'genres']).split('|'))
+            recgenres=set(str(first['Genre']).split('|'))
+            shared=sorted(srcgenres & recgenres)
+            explain_result(
+                'kesamaan genre dari MovieLens',
+                f'**{first["Film rekomendasi"]}** mendapat skor kesamaan **{float(first["Kesamaan genre"]):.4f}** '
+                f'terhadap **{title}**. Nilai dihitung dari genre, bukan sinopsis atau rating penonton.',
+                f'**Film acuan:** {title} — {frame.loc[ix,"genres"]}.\n\n'
+                f'**Film pembanding:** {first["Film rekomendasi"]} — {first["Genre"]}.\n\n'
+                f'**Genre sama:** {", ".join(shared) if shared else "tidak ada genre berlabel sama"}.\n\n'
+                f'Genre dipecah menjadi kata, dibobotkan dengan TF-IDF, lalu '
+                f'dihitung kesamaan vektor menggunakan linear kernel pada vektor '
+                f'yang sudah ternormalisasi (setara cosine similarity) = '
+                f'**{float(first["Kesamaan genre"]):.4f}**. '
+                'Film diperingkat dari skor tertinggi, tanpa memasukkan film acuan itu sendiri.'
+            )
     with tab2:
         from collections import Counter
         counts=Counter(g.strip() for val in frame.genres.dropna() for g in str(val).split('|') if g.strip())
         top_genres=pd.DataFrame(counts.most_common(18),columns=['Genre','Jumlah film'])
         chart_layout(px.bar(top_genres,x='Jumlah film',y='Genre',orientation='h',title='18 genre paling umum'))
         compact_dataframe(top_genres,hide_index=True,use_container_width=True)
+        if not top_genres.empty:
+            g=top_genres.iloc[0]
+            explain_result(
+                'jumlah film per genre',
+                f'Genre **{g["Genre"]}** tercatat pada **{int(g["Jumlah film"]):,} dari '
+                f'{len(frame):,} film valid**. Satu film dapat masuk lebih dari satu genre, '
+                'sehingga jumlah seluruh batang bisa lebih besar daripada jumlah film.',
+                f'Jumlah genre dihitung dengan memisahkan kolom `genres` pada karakter `|`, '
+                f'lalu menghitung berapa film yang memuat nama genre tersebut. '
+                f'Proporsi genre {g["Genre"]} = {int(g["Jumlah film"]):,} ÷ '
+                f'{len(frame):,} = **{int(g["Jumlah film"])/len(frame):.1%}**.'
+            )
     with tab3:
         st.markdown('**Cari film dalam dataset MovieLens**')
         st.caption('Ketik sebagian judul untuk mencari di seluruh katalog film. Data ini memuat judul, genre, dan tahun; bukan sinopsis cerita.')
@@ -1231,6 +1428,13 @@ def render_movie():
             if len(dataset_view) > 50:
                 st.caption('Menampilkan 50 hasil pertama. Ketik judul lebih spesifik untuk mempersempit hasil.')
         st.caption('Rating.csv juga tersedia dari Movie.zip, tetapi notebook Content_Based_Filtering_ML menggunakan fitur genre dari movie.csv untuk metode ini.')
+        explain_result('jumlah film pada pencarian',
+            f'Hasil pencarian saat ini memuat **{len(dataset_view):,} film** dari '
+            f'**{len(frame):,} film valid**. Pencarian mencocokkan bagian judul, '
+            'bukan genre atau kata dalam sinopsis.',
+            'Jika kotak pencarian kosong, seluruh data film valid digunakan. '
+            'Jika ada teks, hanya baris yang judulnya mengandung teks tersebut yang dihitung. '
+            'Tabel visual dibatasi 50 hasil teratas agar tetap ringan.')
     note('Untuk menghemat memori, dashboard menghitung kemiripan film yang dipilih terhadap semua film, bukan membangun matriks kemiripan penuh 9.000 × 9.000. Rumus cosine similarity tetap setara.')
 
 
@@ -1258,10 +1462,64 @@ def render_user_cf():
         st.write(f'Pengguna **{user}** paling mirip dengan **{nearest}**.')
         if len(recommendations):show_table(recommendations,'user_based_rekomendasi.csv')
         else:st.info('Tidak ada film baru dengan rating tetangga yang memenuhi batas ini. Kondisi ini mungkin terjadi pada dataset contoh yang sangat kecil.')
+        if not recommendations.empty:
+            first=recommendations.iloc[0]
+            explain_result(
+                'asal film yang direkomendasikan',
+                f'**{first["Film"]}** direkomendasikan untuk **{user}** karena **{user}** '
+                f'belum memberi rating, sedangkan pengguna paling mirip (**{nearest}**) '
+                f'memberikan rating **{float(first["Rating pengguna serupa"]):g}** '
+                f'(batas minimum **{threshold}**).',
+                f'Rating **{first["Rating pengguna serupa"]:g}** berasal langsung dari '
+                f'sel matriks pengguna **{nearest}** pada film **{first["Film"]}**. '
+                f'Rating pengguna target **{user}** pada film itu masih 0 di matriks '
+                '(artinya belum tercatat, bukan tidak suka). '
+                f'Film muncul karena sudah lolos batas rating **{threshold}** '
+                'dan berasal dari pengguna dengan cosine similarity terbesar.'
+            )
+        else:
+            n_new = int(((matrix.loc[user] == 0) & (matrix.loc[nearest] > 0)).sum())
+            n_pass = int(((matrix.loc[user] == 0) & (matrix.loc[nearest] >= threshold)).sum())
+            explain_result('mengapa rekomendasi kosong',
+                f'Pengguna terdekat **{nearest}** mempunyai **{n_new} film** yang belum '
+                f'dinilai **{user}** dan memiliki rating positif. Setelah menerapkan '
+                f'batas rating **{threshold}**, hanya **{n_pass} film** yang memenuhi syarat.',
+                'Algoritma di halaman ini hanya mengambil rekomendasi dari **satu pengguna '
+                'paling mirip**. Jika tidak ada film yang belum ditonton dan diberi rating '
+                'setidaknya sebesar batas pilihan, tabel rekomendasi kosong. '
+                'Ini bukan berarti algoritma gagal.')
     with t2:
         chart_layout(px.imshow(sim,x=sim.columns,y=sim.index,zmin=0,zmax=1,title='Cosine similarity antar pengguna'))
         compact_dataframe(neighbours.rename('Skor kesamaan').reset_index().rename(columns={'index':'Pengguna lain'}),hide_index=True,use_container_width=True)
-    with t3:compact_dataframe(matrix,use_container_width=True)
+        va=matrix.loc[user].to_numpy(dtype=float)
+        vb=matrix.loc[nearest].to_numpy(dtype=float)
+        dot=float(np.dot(va,vb))
+        norm_a=float(np.linalg.norm(va))
+        norm_b=float(np.linalg.norm(vb))
+        shared=int(((va != 0)&(vb != 0)).sum())
+        explain_result(
+            'kemiripan pengguna',
+            f'**{nearest}** adalah pengguna dengan skor cosine similarity tertinggi '
+            f'terhadap **{user}**: **{float(neighbours.iloc[0]):.4f}**. '
+            f'Kedua pengguna memiliki **{shared} film** dengan rating tercatat pada keduanya.',
+            f'Vektor rating mencakup semua **{matrix.shape[1]} film**. '
+            f'Nilai kosong diisi 0 untuk kebutuhan matriks.\n\n'
+            f'Perkalian titik = **{dot:.4f}**; panjang vektor {user} = **{norm_a:.4f}**; '
+            f'panjang vektor {nearest} = **{norm_b:.4f}**.\n\n'
+            f'**Cosine similarity** = {dot:.4f} ÷ ({norm_a:.4f} × {norm_b:.4f}) '
+            f'= **{float(neighbours.iloc[0]):.4f}** '
+            '(jika ada vektor seluruhnya nol, pustaka mengembalikan kemiripan 0).'
+        )
+    with t3:
+        compact_dataframe(matrix,use_container_width=True)
+        explain_result('matriks rating pengguna dan film',
+            f'Matriks berisi **{matrix.shape[0]} pengguna × {matrix.shape[1]} film**. '
+            'Baris menunjukkan pengguna, kolom menunjukkan film, dan angka adalah '
+            'rating yang diberikan. Nilai 0 berarti tidak ada rating yang tercatat.',
+            'Matriks dibuat dari kolom `Pengguna`, `Film`, dan `Rating` dengan '
+            'pivot_table. Jika ada lebih dari satu rating untuk pasangan pengguna–film, '
+            'pivot_table memakai rata-rata. Sel yang tidak punya catatan rating '
+            'diisi 0 khusus untuk perhitungan kemiripan, bukan untuk menyatakan dislike.')
     note('Angka 0 pada matriks berarti <b>belum ada rating</b> (missing), bukan rating negatif. Penentuan rekomendasi mengikuti notebook: film yang belum dinilai pengguna target tetapi diberi rating tinggi oleh tetangga terdekat.')
 
 
@@ -1297,10 +1555,45 @@ def render_item_cf():
         if len(result):
             show_table(result,'item_based_buku.csv')
             chart_layout(px.bar(result,x='Kemiripan (1 − jarak)',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
+            first=result.iloc[0]
+            book2=str(first['Buku rekomendasi'])
+            vector_a=pivot.loc[name].to_numpy(dtype=float)
+            vector_b=pivot.loc[book2].to_numpy(dtype=float)
+            dot=float(np.dot(vector_a,vector_b))
+            norm_a=float(np.linalg.norm(vector_a))
+            norm_b=float(np.linalg.norm(vector_b))
+            common_raters=int(np.sum((vector_a!=0)&(vector_b!=0)))
+            explain_result(
+                'kemiripan dan jarak buku',
+                f'**{book2}** terpilih karena pola ratingnya dekat dengan **{name}**. '
+                f'Jarak cosine = **{float(first["Jarak cosine"]):.4f}**, sehingga '
+                f'kemiripan = 1 − jarak = **{float(first["Kemiripan (1 − jarak)"]):.4f}**. '
+                'Semakin kecil jarak, semakin mirip vektor interaksi kedua buku.',
+                f'Buku pertama dan buku rekomendasi dibandingkan berdasarkan rating dari '
+                f'**{len(pivot.columns):,} kolom pengguna**, bukan berdasarkan isi buku.\n\n'
+                f'Pengguna dengan rating bukan nol pada **kedua** buku: **{common_raters}**.\n\n'
+                f'Perkalian titik vektor = **{dot:.4f}**; panjang vektor pertama '
+                f'= **{norm_a:.4f}**, panjang kedua = **{norm_b:.4f}**.\n\n'
+                f'**Cosine similarity** = dot ÷ (panjang pertama × panjang kedua) '
+                f'≈ **{float(first["Kemiripan (1 − jarak)"]):.4f}**.\n\n'
+                f'**Jarak cosine** = 1 − similarity = **{float(first["Jarak cosine"]):.4f}**. '
+                'Dua kolom ini menyajikan satu hubungan dari sudut pandang berbeda, '
+                'bukan dua model terpisah.'
+            )
     with t2:
         counts=df.bookRating.value_counts().sort_index().rename_axis('Rating').reset_index(name='Jumlah')
         chart_layout(px.bar(counts,x='Rating',y='Jumlah',title='Distribusi rating buku'))
         st.caption('Rating 0 berasal dari data Book-Crossing dan merepresentasikan rating implisit / tanpa penilaian numerik eksplisit.')
+        zero=int((df.bookRating==0).sum())
+        explicit=int((df.bookRating!=0).sum())
+        explain_result('distribusi rating buku',
+            f'Terdapat **{len(df):,} catatan interaksi**: **{zero:,} rating 0** '
+            f'dan **{explicit:,} rating bukan nol**. Angka 0 dalam sumber Book-Crossing '
+            'merupakan interaksi tanpa skor eksplisit; bukan penilaian buruk.',
+            f'Jumlah pada setiap batang dihitung dengan menghitung baris yang '
+            'memiliki nilai `bookRating` tersebut. Total frekuensi semua batang = '
+            f'**{len(df):,} baris**. Data rating inilah yang membentuk '
+            'matriks buku × pengguna untuk rekomendasi.')
     with t3:
         st.markdown('''**Mengikuti tahapan materi:**
 
@@ -1311,6 +1604,16 @@ def render_item_cf():
 5. Menghapus pasangan pengguna–judul yang duplikat, lalu membentuk matriks buku × pengguna untuk kNN cosine.
 
 **Catatan:** agar repo ringan, dashboard menyertakan data hasil penyaringan dari arsip sumber, bukan keseluruhan arsip mentah. Jumlah buku dapat berbeda bila CSV dibaca dengan kebijakan baris rusak yang berbeda.''')
+        explain_result('ukuran dataset setelah filter',
+            f'Dataset yang digunakan saat ini memuat **{len(df):,} interaksi** '
+            f'dari **{len(pivot.columns):,} pengguna** terhadap '
+            f'**{len(pivot):,} judul buku**.',
+            'Jumlah interaksi adalah banyaknya baris data rating setelah penyaringan; '
+            'jumlah pengguna dan judul merupakan banyaknya nilai unik pada data aktif. '
+            + ('CSV unggahan telah dianggap sebagai data siap olah; '
+               'filter penyaringan arsip asli **tidak dijalankan ulang** untuk unggahan.'
+               if up is not None else
+               'Data bawaan merupakan data yang telah disaring dari arsip Book-Crossing.'))
     note('Jarak cosine yang lebih kecil berarti pola rating buku lebih mirip. Skor ini mengukur kemiripan berdasarkan interaksi, bukan kesamaan isi cerita buku.')
 
 
@@ -1385,6 +1688,19 @@ def render_hybrid():
         ('Bobot Content-Based Filtering', f'{cb_weight:.0%}'),
         ('Bobot Collaborative Filtering', f'{cf_weight:.0%}'),
     ])
+    explain_result(
+        'jumlah kandidat dan hasil Hybrid',
+        f'Pengguna **{target}** sudah memberi rating pada **{len(rated)} film**: '
+        f'{", ".join(rated)}. Tersisa **{len(candidate)} film kandidat** yang belum '
+        f'dinilai. Dari jumlah tersebut, **{len(recommended_df)} film** memiliki '
+        'skor akhir Hybrid positif dan ditampilkan sebagai rekomendasi.',
+        f'Film yang dianggap disukai adalah yang diberi rating minimal 4: '
+        f'**{", ".join(liked) if liked else "tidak ada"}**. '
+        'Film tersebut menjadi dasar perhitungan kemiripan Content-Based. '
+        'Collaborative Filtering menggunakan rating pengguna lain beserta '
+        'kemiripan mereka terhadap pengguna target. Kandidat dengan skor '
+        'akhir tepat nol tetap dihitung, tetapi tidak masuk daftar rekomendasi.'
+    )
 
     tab_rekomendasi, tab_kontribusi, tab_rumus = st.tabs([
         'Peringkat rekomendasi', 'Kontribusi metode', 'Data dan rumus'
@@ -1413,6 +1729,27 @@ def render_hybrid():
                 f"**{unggulan['Skor Akhir Hybrid']:.4f}**. Skor ini adalah nilai gabungan "
                 'untuk mengurutkan rekomendasi, **bukan rating film dan bukan peluang dalam persen**.'
             )
+            explain_result(
+                'peringkat rekomendasi Hybrid',
+                f'Film **{unggulan["Film"]}** menempati urutan teratas dengan skor '
+                f'**{unggulan["Skor Akhir Hybrid"]:.4f}**. '
+                'Film lain diurutkan dari skor gabungan terbesar ke terkecil.',
+                f'Skor untuk film teratas berasal dari **{cb_weight:.0%} × '
+                f'{unggulan["Normalisasi Content-Based"]:.4f}** '
+                f'(Content-Based) ditambah **{cf_weight:.0%} × '
+                f'{unggulan["Normalisasi Collaborative Filtering"]:.4f}** '
+                f'(Collaborative Filtering).\n\n'
+                f'= **{unggulan["Skor Akhir Hybrid"]:.4f}**. '
+                'Nilai 0–1 ini dipakai untuk pemeringkatan relatif di antara '
+                'kandidat, bukan probabilitas atau rating dalam skala 1–5.'
+            )
+        if recommended_df.empty and not score_df.empty:
+            explain_result('mengapa belum ada rekomendasi',
+                'Semua kandidat memiliki skor akhir nol pada bobot yang dipilih. '
+                'Karena halaman ini hanya menampilkan skor positif, daftar rekomendasi kosong.',
+                'Periksa tabel seluruh kandidat pada tab Data dan rumus. '
+                'Skor nol berarti tidak ada sinyal rekomendasi positif setelah '
+                'normalisasi dan pembobotan; bukan bukti bahwa film buruk.')
 
     with tab_kontribusi:
         if not recommended_df.empty:
@@ -1430,6 +1767,21 @@ def render_hybrid():
             st.caption('Grafik menampilkan skor yang sudah disamakan skalanya (0–1) '
                        'sebelum dikalikan dengan bobot. Batang yang lebih tinggi '
                        'menunjukkan nilai normalisasi yang lebih besar untuk metode tersebut.')
+            ex=recommended_df.iloc[0]
+            explain_result(
+                'kontribusi kedua metode',
+                f'Untuk **{ex["Film"]}**, nilai normalisasi Content-Based adalah '
+                f'**{ex["Normalisasi Content-Based"]:.4f}**, sedangkan Collaborative '
+                f'Filtering **{ex["Normalisasi Collaborative Filtering"]:.4f}**. '
+                'Keduanya dibandingkan sebelum dikalikan bobot yang dipilih.',
+                f'Kontribusi sesudah bobot: Content-Based = {cb_weight:.2f} × '
+                f'{ex["Normalisasi Content-Based"]:.4f} '
+                f'= **{cb_weight*ex["Normalisasi Content-Based"]:.4f}**; '
+                f'Collaborative Filtering = {cf_weight:.2f} × '
+                f'{ex["Normalisasi Collaborative Filtering"]:.4f} '
+                f'= **{cf_weight*ex["Normalisasi Collaborative Filtering"]:.4f}**. '
+                'Penjumlahan dua kontribusi tersebut menghasilkan skor akhir Hybrid.'
+            )
         else:
             st.info('Tidak ada rekomendasi dengan skor positif untuk dibandingkan.')
 
@@ -1480,6 +1832,66 @@ Skor akhir bukan rating 1–5, persentase kecocokan, atau probabilitas.
             st.markdown(
                 f'**Skor Akhir Hybrid** = ({cb_weight:.0%} × {normal_konten:.4f}) + '
                 f'({cf_weight:.0%} × {normal_kolaboratif:.4f}) = **{total:.4f}**.'
+            )
+        if not score_df.empty:
+            ex=score_df.iloc[0]
+            movie=str(ex['Film'])
+            content_values=[(x, float(item_sim.loc[movie,x])) for x in liked]
+            other_source=None
+            if movie in matrix.columns:
+                for other, similarity_value in user_sim[target].drop(target).sort_values(ascending=False).items():
+                    if matrix.loc[other,movie] > 0:
+                        other_source=(str(other), float(matrix.loc[other,movie]), float(similarity_value))
+                        break
+            cb_min=float(score_df['Skor Content-Based'].min())
+            cb_max=float(score_df['Skor Content-Based'].max())
+            cf_min=float(score_df['Skor Collaborative Filtering'].min())
+            cf_max=float(score_df['Skor Collaborative Filtering'].max())
+            if content_values:
+                cb_items='; '.join(f'{x}: {val:.4f}' for x,val in content_values)
+                cb_detail=(f'Kemiripan genre **{movie}** dengan film yang disukai: '
+                           f'{cb_items}. Rata-ratanya = **{float(ex["Skor Content-Based"]):.4f}**.')
+            else:
+                cb_detail='Tidak ada film dengan rating ≥ 4, sehingga skor Content-Based awal = 0.'
+            if other_source:
+                other, rating, similarity_value=other_source
+                cf_detail=(f'Pengguna lain pertama yang telah menilai **{movie}** '
+                           f'dalam urutan kemiripan adalah **{other}**. '
+                           f'Rating = **{rating:g}**, kemiripan terhadap {target} '
+                           f'= **{similarity_value:.4f}**; skor Collaborative awal '
+                           f'= {rating:g} × {similarity_value:.4f} '
+                           f'= **{float(ex["Skor Collaborative Filtering"]):.4f}**.')
+            else:
+                cf_detail=('Tidak ada pengguna lain dengan rating positif untuk film ini '
+                           'di matriks, sehingga skor Collaborative Filtering awal = 0.')
+            if cb_max!=cb_min:
+                normal_cb=(f'({float(ex["Skor Content-Based"]):.4f} − {cb_min:.4f}) '
+                           f'÷ ({cb_max:.4f} − {cb_min:.4f})')
+            else:
+                normal_cb='semua skor Content-Based sama → 0 oleh MinMaxScaler'
+            if cf_max!=cf_min:
+                normal_cf=(f'({float(ex["Skor Collaborative Filtering"]):.4f} − {cf_min:.4f}) '
+                           f'÷ ({cf_max:.4f} − {cf_min:.4f})')
+            else:
+                normal_cf='semua skor Collaborative Filtering sama → 0 oleh MinMaxScaler'
+            explain_result(
+                f'contoh perhitungan lengkap untuk {movie}',
+                f'Skor awal Content-Based **{float(ex["Skor Content-Based"]):.4f}** '
+                f'dan Collaborative Filtering **{float(ex["Skor Collaborative Filtering"]):.4f}** '
+                'dinormalisasi masing-masing, lalu dikalikan bobot dan dijumlahkan.',
+                f'**1. Dari mana skor Content-Based?**\n\n{cb_detail}\n\n'
+                f'**2. Dari mana skor Collaborative Filtering?**\n\n{cf_detail}\n\n'
+                f'**3. Normalisasi dari seluruh {len(score_df)} kandidat:**\n\n'
+                f'- Content-Based: minimum {cb_min:.4f}, maksimum {cb_max:.4f}. '
+                f'{normal_cb} = **{float(ex["Normalisasi Content-Based"]):.4f}**.\n'
+                f'- Collaborative Filtering: minimum {cf_min:.4f}, maksimum {cf_max:.4f}. '
+                f'{normal_cf} = **{float(ex["Normalisasi Collaborative Filtering"]):.4f}**.\n\n'
+                f'**4. Skor akhir pada bobot sekarang:**\n\n'
+                f'({cb_weight:.0%} × {float(ex["Normalisasi Content-Based"]):.4f}) + '
+                f'({cf_weight:.0%} × {float(ex["Normalisasi Collaborative Filtering"]):.4f}) '
+                f'= **{float(ex["Skor Akhir Hybrid"]):.4f}**.\n\n'
+                'Angka ini sesuai baris teratas pada tabel (peringkat dihitung ulang '
+                'ketika pilihan pengguna atau bobot berubah).'
             )
         st.markdown('#### Seluruh film kandidat (termasuk skor nol)')
         st.caption('Tabel berikut untuk memahami perhitungan. Film dengan skor nol '
