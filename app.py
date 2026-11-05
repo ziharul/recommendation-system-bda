@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from hashlib import sha256
 from pathlib import Path
 import re
 
@@ -644,6 +645,43 @@ def compact_dataframe(df, height=None, **kwargs):
     st.dataframe(df, height=actual, **kwargs)
 
 
+def choose_explanation_row(frame, label_col, key, score_col=None):
+    """Choose a CURRENT output row to explain; never use a fixed tutorial row."""
+    if frame.empty:
+        return None
+    if len(frame) == 1:
+        st.caption('Penjelasan di bawah menggunakan satu-satunya baris hasil yang tersedia.')
+        return frame.iloc[0]
+    def describe(pos):
+        row = frame.iloc[pos]
+        label = str(row[label_col])
+        if score_col is not None:
+            try:
+                label += f' · {score_col}: {float(row[score_col]):.4f}'
+            except (ValueError, TypeError):
+                pass
+        return label
+    pos = st.selectbox(
+        '🔎 Pilih baris hasil yang ingin dijelaskan perhitungannya',
+        options=list(range(len(frame))),
+        format_func=describe,
+        key=key,
+    )
+    st.caption('Angka dan langkah perhitungan di bawah mengikuti baris hasil yang dipilih.')
+    return frame.iloc[pos]
+
+
+def selectable_rules(rules):
+    """Return current displayed association rules, with a human-readable rule name."""
+    rows = rules.sort_values(['lift', 'confidence'], ascending=False).reset_index(drop=True).copy()
+    if not rows.empty:
+        rows['Aturan dipilih'] = [
+            ', '.join(sorted(a)) + ' → ' + ', '.join(sorted(b))
+            for a, b in zip(rows['antecedents'], rows['consequents'])
+        ]
+    return rows
+
+
 def explain_result(title, meaning, breakdown=None):
     """Penjelasan ringkas yang selalu terlihat + rincian hitung opsional.
 
@@ -1022,6 +1060,10 @@ def render_apriori():
     else: tx=EXAMPLE_BASKET
     if not tx:
         st.warning('CSV tidak memiliki transaksi yang dapat dianalisis.');return
+    st.info('**Penting:** minimum support dan minimum confidence adalah **batas penyaringan**, '
+            'bukan pengubah angka support, confidence, atau lift suatu aturan. '
+            'Selama data transaksi tetap sama, skor aturan yang sama juga tetap sama. '
+            'Yang berubah saat slider digeser adalah aturan atau kombinasi yang lolos batas.')
     a,b=st.columns(2)
     with a: support=st.slider('Minimum support',0.1,1.0,0.4,0.05,key='sup_a1')
     with b: confidence=st.slider('Minimum confidence',0.1,1.0,0.7,0.05,key='conf_a1')
@@ -1045,7 +1087,9 @@ def render_apriori():
         st.markdown('Kombinasi barang yang memiliki nilai support ≥ batas pilihan.')
         show_table(pretty_itemsets(itemsets),'apriori_frequent_itemsets.csv')
         if not itemsets.empty:
-            chosen_item = itemsets.sort_values('support', ascending=False).iloc[0]
+            available_items = itemsets.sort_values('support', ascending=False).reset_index(drop=True).copy()
+            available_items['Kombinasi'] = available_items['itemsets'].apply(lambda x: ', '.join(sorted(x)))
+            chosen_item = choose_explanation_row(available_items, 'Kombinasi', 'detail_a1_itemsets', 'support')
             goods = sorted(chosen_item['itemsets'])
             appearances = int(basket[goods].all(axis=1).sum())
             explain_result(
@@ -1093,7 +1137,7 @@ def render_apriori():
             )
 
             chart_layout(fig, height=420)
-            example = rules.sort_values(['lift','confidence'],ascending=False).iloc[0]
+            example = choose_explanation_row(selectable_rules(rules), 'Aturan dipilih', 'detail_a1_rules', 'lift')
             a_items = sorted(example['antecedents'])
             b_items = sorted(example['consequents'])
             a_n = int(basket[a_items].all(axis=1).sum())
@@ -1104,7 +1148,8 @@ def render_apriori():
                 f'Aturan **{", ".join(a_items)} → {", ".join(b_items)}** '
                 f'memiliki support **{example["support"]:.3f}**, confidence '
                 f'**{example["confidence"]:.3f}**, dan lift **{example["lift"]:.3f}**. '
-                'Lift lebih dari 1 menunjukkan asosiasi positif; bukan hubungan sebab-akibat.',
+                'Lift lebih dari 1 menunjukkan asosiasi positif; bukan hubungan sebab-akibat. '
+                f'Aturan ini lolos minimum support **{support:.0%}** dan confidence **{confidence:.0%}**.',
                 f'**Perhitungan dari {len(tx)} transaksi yang sedang digunakan:**\n\n'
                 f'- Transaksi yang memuat {", ".join(a_items)}: **{a_n}**.\n'
                 f'- Transaksi yang memuat {", ".join(b_items)}: **{b_n}**.\n'
@@ -1129,7 +1174,9 @@ def render_groceries():
     hero('AKTIVITAS 02 · ASSOCIATION RULE', 'Market Basket Analysis (Groceries)',
          'Eksplorasi transaksi belanja dan aturan Apriori menggunakan dataset Groceries berdasarkan materi.')
     section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
-    st.info('Mode aman: membuka halaman ini tidak otomatis menjalankan perhitungan. Atur parameter, lalu klik **Jalankan Analisis**.')
+    st.info('**Cara kerja parameter:** ubah nilai lalu klik **Jalankan Analisis** untuk memperbarui hasil. '
+            'Dashboard tidak akan menampilkan hasil lama sebagai hasil parameter baru. '
+            'Support dan confidence adalah ambang filter; skor aturan tetap jika dataset sama.')
 
     
     with st.container(border=True):
@@ -1179,6 +1226,10 @@ def render_groceries():
             key='run_groceries'
         )
 
+    active_upload = up.getvalue() if up is not None else None
+    active_signature = (round(float(support), 8), round(float(confidence), 8),
+                        int(max_len), sha256(active_upload).hexdigest() if active_upload is not None else 'DEFAULT')
+
     if submitted:
         try:
             with st.spinner('Menghitung aturan asosiasi. Proses berjalan dengan batas memori...'):
@@ -1186,7 +1237,7 @@ def render_groceries():
                     float(support),
                     float(confidence),
                     int(max_len),
-                    up.getvalue() if up is not None else None
+                    active_upload
                 )
 
             st.session_state['groceries_last_result'] = res
@@ -1195,6 +1246,7 @@ def render_groceries():
                 float(confidence),
                 int(max_len)
             )
+            st.session_state['groceries_last_signature'] = active_signature
 
             st.success('Analisis berhasil dijalankan.')
 
@@ -1210,9 +1262,18 @@ def render_groceries():
         return
 
 
+    if st.session_state.get('groceries_last_signature') != active_signature:
+        st.warning('**Input berubah, tetapi analisis belum dijalankan ulang.** '
+                   'Hasil lama disembunyikan agar tidak disalahartikan. '
+                   'Klik **Jalankan Analisis** untuk melihat hasil parameter atau dataset terbaru.')
+        return
+
     itemsets,rules,frequency,n_orders,n_items = st.session_state['groceries_last_result']
     s_prev,c_prev,l_prev = st.session_state['groceries_last_params']
-    st.caption(f'Hasil perhitungan terakhir — support {s_prev:.3f} · confidence {c_prev:.2f} · maksimal {l_prev} barang per kombinasi.')
+    st.success(f'**Hasil sudah sesuai input saat ini:** minimum support {s_prev:.3f} · '
+               f'minimum confidence {c_prev:.2f} · maksimal {l_prev} barang per kombinasi. '
+               'Besar support, confidence, dan lift suatu aturan tidak berubah karena ambang; '
+               'yang berubah adalah aturan yang lolos penyaringan.')
     section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Transaksi',f'{n_orders:,}'),('Jenis barang',f'{n_items:,}'),
              ('Frequent itemsets',f'{len(itemsets):,}'),('Aturan asosiasi',f'{len(rules):,}')])
@@ -1222,7 +1283,7 @@ def render_groceries():
         chart_layout(px.bar(top,x='Frekuensi',y='Barang',orientation='h',title='15 jenis barang paling sering muncul'))
         compact_dataframe(top,hide_index=True,use_container_width=True)
         if not top.empty:
-            first=top.iloc[0]
+            first=choose_explanation_row(top, 'Barang', 'detail_groceries_frequency', 'Frekuensi')
             explain_result(
                 'frekuensi barang',
                 f'**{first["Barang"]}** muncul dalam **{int(first["Frekuensi"]):,} dari '
@@ -1244,7 +1305,7 @@ def render_groceries():
             chart_layout(px.scatter(graph,x='Support',y='Confidence',size='Lift',
                                     hover_data=['Jika membeli','Maka membeli'],
                                     title='Pola support–confidence–lift'))
-            example=rules.sort_values(['lift','confidence'],ascending=False).iloc[0]
+            example=choose_explanation_row(selectable_rules(rules), 'Aturan dipilih', 'detail_groceries_rules', 'lift')
             ante=', '.join(sorted(example['antecedents']))
             cons=', '.join(sorted(example['consequents']))
             together=round(float(example['support'])*n_orders)
@@ -1323,10 +1384,13 @@ def render_content():
     metrics([('Jumlah film',len(df)),('Istilah TF-IDF',matrix.shape[1]),('Rekomendasi',len(result))])
     t1,t2,t3=st.tabs(['Rekomendasi','Matriks kemiripan','Data deskripsi'])
     with t1:
+        st.caption('Jumlah rekomendasi mengatur **berapa film yang ditampilkan**, bukan '
+                   'mengubah skor kemiripan pasangan film yang sama. Ganti film acuan '
+                   'atau dataset untuk membandingkan skor yang berbeda.')
         show_table(result,'content_based_rekomendasi.csv')
         chart_layout(px.bar(result,x='Kemiripan',y='Film rekomendasi',orientation='h',title=f'Film mirip dengan {title}'))
         if not result.empty:
-            row = result.iloc[0]
+            row = choose_explanation_row(result, 'Film rekomendasi', 'detail_content_movies', 'Kemiripan')
             film2 = str(row['Film rekomendasi'])
             j = int(df.index[df.Judul == film2][0])
             score = float(row['Kemiripan'])
@@ -1395,10 +1459,12 @@ def render_movie():
     metrics([('Film valid',f'{len(frame):,}'),('Fitur genre TF-IDF',str(X.shape[1])),('Rekomendasi',len(result))])
     tab1,tab2,tab3=st.tabs(['Rekomendasi film','Analisis genre','Dataset'])
     with tab1:
+        st.caption('Jumlah rekomendasi hanya mengubah banyaknya film yang ditampilkan; '
+                   'kesamaan genre dua film tetap sama jika datanya tidak berubah.')
         show_table(result,'movie_recommendations.csv')
         chart_layout(px.bar(result.head(12),x='Kesamaan genre',y='Film rekomendasi',orientation='h',title=f'Film paling mirip dengan {title}'),height=400)
         if not result.empty:
-            first=result.iloc[0]
+            first=choose_explanation_row(result, 'Film rekomendasi', 'detail_movie_recommendations', 'Kesamaan genre')
             srcgenres=set(str(frame.loc[ix,'genres']).split('|'))
             recgenres=set(str(first['Genre']).split('|'))
             shared=sorted(srcgenres & recgenres)
@@ -1496,10 +1562,12 @@ def render_user_cf():
     t1,t2,t3=st.tabs(['Hasil rekomendasi','Kemiripan pengguna','Matriks rating'])
     with t1:
         st.write(f'Pengguna **{user}** paling mirip dengan **{nearest}**.')
+        st.caption('Ambang minimal rating **menyaring** film yang disarankan, '
+                   'tidak mengubah rating aslinya atau skor kemiripan antar pengguna.')
         if len(recommendations):show_table(recommendations,'user_based_rekomendasi.csv')
         else:st.info('Tidak ada film baru dengan rating tetangga yang memenuhi batas ini. Kondisi ini mungkin terjadi pada dataset contoh yang sangat kecil.')
         if not recommendations.empty:
-            first=recommendations.iloc[0]
+            first=choose_explanation_row(recommendations, 'Film', 'detail_user_recommendations', 'Rating pengguna serupa')
             explain_result(
                 'asal film yang direkomendasikan',
                 f'**{first["Film"]}** direkomendasikan untuk **{user}** karena **{user}** '
@@ -1588,10 +1656,12 @@ def render_item_cf():
     metrics([('Interaksi setelah filter',f'{len(df):,}'),('Buku',f'{len(pivot):,}'),('Pengguna',f'{len(pivot.columns):,}'),('Rekomendasi',len(result))])
     t1,t2,t3=st.tabs(['Rekomendasi buku','Pola rating','Proses filter data'])
     with t1:
+        st.caption('Jumlah rekomendasi mengatur panjang daftar. Nilai kemiripan '
+                   'sepasang buku tidak berubah hanya karena jumlah daftar diperbesar.')
         if len(result):
             show_table(result,'item_based_buku.csv')
             chart_layout(px.bar(result,x='Kemiripan (1 − jarak)',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
-            first=result.iloc[0]
+            first=choose_explanation_row(result, 'Buku rekomendasi', 'detail_item_books', 'Kemiripan (1 − jarak)')
             book2=str(first['Buku rekomendasi'])
             vector_a=pivot.loc[name].to_numpy(dtype=float)
             vector_b=pivot.loc[book2].to_numpy(dtype=float)
@@ -1673,6 +1743,9 @@ def render_hybrid():
     with right:
         cb_weight = st.slider('Bobot Content-Based Filtering', 0.0, 1.0, 0.5, 0.05)
     cf_weight = 1 - cb_weight
+    st.caption('Bobot **mengubah skor akhir gabungan**, tetapi film teratas belum tentu '
+               'berubah. Dataset contoh hanya memuat sedikit film dan rating; '
+               'pilih pengguna berbeda untuk melihat variasi kandidat.')
 
     # Pertahankan algoritma dan dataset dari app.py asli. Tidak ada perubahan model.
     tfidf = TfidfVectorizer()
@@ -1759,7 +1832,7 @@ def render_hybrid():
                 recommended_df, x='Skor Akhir Hybrid', y='Film', orientation='h',
                 title=f'Rekomendasi untuk {target}'
             ))
-            unggulan = recommended_df.iloc[0]
+            unggulan = choose_explanation_row(recommended_df, 'Film', 'detail_hybrid_rank', 'Skor Akhir Hybrid')
             st.markdown(
                 f"**Cara membaca hasil:** {unggulan['Film']} memiliki skor akhir "
                 f"**{unggulan['Skor Akhir Hybrid']:.4f}**. Skor ini adalah nilai gabungan "
@@ -1767,9 +1840,10 @@ def render_hybrid():
             )
             explain_result(
                 'peringkat rekomendasi Hybrid',
-                f'Film **{unggulan["Film"]}** menempati urutan teratas dengan skor '
-                f'**{unggulan["Skor Akhir Hybrid"]:.4f}**. '
-                'Film lain diurutkan dari skor gabungan terbesar ke terkecil.',
+                f'Film **{unggulan["Film"]}** memperoleh skor akhir '
+                f'**{unggulan["Skor Akhir Hybrid"]:.4f}** pada pilihan saat ini. '
+                'Urutan ditentukan oleh skor terbesar; film yang sedang dijelaskan '
+                'dipilih dari tabel hasil, sehingga tidak harus selalu film pertama.',
                 f'Skor untuk film teratas berasal dari **{cb_weight:.0%} × '
                 f'{unggulan["Normalisasi Content-Based"]:.4f}** '
                 f'(Content-Based) ditambah **{cf_weight:.0%} × '
@@ -1803,7 +1877,7 @@ def render_hybrid():
             st.caption('Grafik menampilkan skor yang sudah disamakan skalanya (0–1) '
                        'sebelum dikalikan dengan bobot. Batang yang lebih tinggi '
                        'menunjukkan nilai normalisasi yang lebih besar untuk metode tersebut.')
-            ex=recommended_df.iloc[0]
+            ex=choose_explanation_row(recommended_df, 'Film', 'detail_hybrid_contributions', 'Skor Akhir Hybrid')
             explain_result(
                 'kontribusi kedua metode',
                 f'Untuk **{ex["Film"]}**, nilai normalisasi Content-Based adalah '
@@ -1851,8 +1925,8 @@ Kedua bobot selalu berjumlah 100%. Semakin tinggi skor akhir, semakin tinggi
 peringkat film dalam rekomendasi **menurut model dan bobot yang dipilih**.
 Skor akhir bukan rating 1–5, persentase kecocokan, atau probabilitas.
 ''')
-        if not recommended_df.empty:
-            unggulan = recommended_df.iloc[0]
+        if not score_df.empty:
+            unggulan = choose_explanation_row(score_df, 'Film', 'detail_hybrid_formula', 'Skor Akhir Hybrid')
             nama = unggulan['Film']
             mentah_konten = unggulan['Skor Content-Based']
             mentah_kolaboratif = unggulan['Skor Collaborative Filtering']
@@ -1860,7 +1934,7 @@ Skor akhir bukan rating 1–5, persentase kecocokan, atau probabilitas.
             normal_kolaboratif = unggulan['Normalisasi Collaborative Filtering']
             total = unggulan['Skor Akhir Hybrid']
             st.markdown(
-                f'**Contoh menggunakan hasil saat ini — {nama} untuk {target}:** '
+                f'**Perhitungan aktual film yang dipilih — {nama} untuk {target}:** '
                 f'Skor awal Content-Based **{mentah_konten:.4f}** menjadi **{normal_konten:.4f}** '
                 f'setelah normalisasi. Skor awal Collaborative Filtering '
                 f'**{mentah_kolaboratif:.4f}** menjadi **{normal_kolaboratif:.4f}** setelah normalisasi.'
@@ -1870,7 +1944,7 @@ Skor akhir bukan rating 1–5, persentase kecocokan, atau probabilitas.
                 f'({cf_weight:.0%} × {normal_kolaboratif:.4f}) = **{total:.4f}**.'
             )
         if not score_df.empty:
-            ex=score_df.iloc[0]
+            ex=unggulan  # Seluruh uraian di bawah mengikuti film yang sama dari pilihan di atas.
             movie=str(ex['Film'])
             content_values=[(x, float(item_sim.loc[movie,x])) for x in liked]
             other_source=None
@@ -1926,8 +2000,8 @@ Skor akhir bukan rating 1–5, persentase kecocokan, atau probabilitas.
                 f'({cb_weight:.0%} × {float(ex["Normalisasi Content-Based"]):.4f}) + '
                 f'({cf_weight:.0%} × {float(ex["Normalisasi Collaborative Filtering"]):.4f}) '
                 f'= **{float(ex["Skor Akhir Hybrid"]):.4f}**.\n\n'
-                'Angka ini sesuai baris teratas pada tabel (peringkat dihitung ulang '
-                'ketika pilihan pengguna atau bobot berubah).'
+                'Angka ini sesuai dengan baris film yang dipilih pada tabel kandidat '
+                '(nilai dan peringkat dihitung ulang saat pengguna atau bobot berubah).'
             )
         st.markdown('#### Seluruh film kandidat (termasuk skor nol)')
         st.caption('Tabel berikut untuk memahami perhitungan. Film dengan skor nol '
