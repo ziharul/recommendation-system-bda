@@ -544,7 +544,7 @@ with st.sidebar:
         </svg>
       </div>
       <div><div class="brand-title">Big Data Analytics</div>
-      <div class="brand-caption">Created by Kelompok 2</div></div>
+      <div class="brand-caption">Created by Kelompok 1 (Amila dan Ziharul)</div></div>
     </div><div class="side-rule"></div>''', unsafe_allow_html=True)
     for group_label, positions in NAV_GROUPS:
         st.markdown(f'<div class="side-section">{group_label}</div>', unsafe_allow_html=True)
