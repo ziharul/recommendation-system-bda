@@ -497,6 +497,42 @@ html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {
   .journey-footer {margin-top:20px;}
 }
 
+
+/* Penanda interaktif: judul expander harus mudah dikenali sebagai area yang bisa diklik. */
+[data-testid="stExpander"] details > summary {
+  background:#EAF2FF !important;
+  border:1px solid #BBD1FB !important;
+  border-radius:11px !important;
+  padding:12px 15px !important;
+  color:#1D4ED8 !important;
+  cursor:pointer !important;
+  transition:background .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+[data-testid="stExpander"] details > summary:hover {
+  background:#DAE9FF !important;
+  border-color:#8EB4FC !important;
+  box-shadow:0 3px 10px rgba(37,99,235,.08);
+}
+[data-testid="stExpander"] details > summary:focus-visible {
+  outline:3px solid rgba(37,99,235,.30);
+  outline-offset:2px;
+}
+[data-testid="stExpander"] details > summary p,
+[data-testid="stExpander"] details > summary [data-testid="stMarkdownContainer"] p {
+  color:#1D4ED8 !important;
+  font-size:.98rem !important;
+  font-weight:800 !important;
+  line-height:1.5 !important;
+}
+[data-testid="stExpander"] details > summary svg {
+  color:#1D4ED8 !important;
+  stroke:#1D4ED8 !important;
+}
+[data-testid="stExpander"] details[open] > summary {
+  background:#E3EEFF !important;
+  border-color:#93B9FF !important;
+}
+
 </style>
 ''', unsafe_allow_html=True)
 
@@ -616,7 +652,7 @@ def explain_result(title, meaning, breakdown=None):
     """
     st.markdown(f"**Memahami hasil — {title}.** {meaning}")
     if breakdown:
-        with st.expander("Dari mana angka ini? Lihat langkah perhitungannya", expanded=False):
+        with st.expander("Lihat asal angka dan langkah perhitungannya (klik untuk buka/tutup)", expanded=False):
             st.markdown(breakdown)
 
 
@@ -1899,7 +1935,7 @@ Skor akhir bukan rating 1–5, persentase kecocokan, atau probabilitas.
         if not score_df.empty:
             compact_dataframe(score_df, hide_index=True, use_container_width=True)
         st.markdown('#### Dataset contoh yang dipakai')
-        with st.expander('Lihat data film dan rating pengguna'):
+        with st.expander('Lihat data film dan rating pengguna (klik untuk buka/tutup)'):
             st.markdown('**Data film**')
             compact_dataframe(movies, hide_index=True, use_container_width=True)
             st.markdown('**Data rating pengguna**')
