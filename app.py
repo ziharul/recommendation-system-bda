@@ -1357,9 +1357,48 @@ def render_item_cf():
             show_table(result,'item_based_buku.csv')
             chart_layout(px.bar(result,x='Skor Kemiripan',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
     with t2:
-        counts=df.bookRating.value_counts().sort_index().rename_axis('Rating').reset_index(name='Jumlah')
-        chart_layout(px.bar(counts,x='Rating',y='Jumlah',title='Distribusi rating buku'))
-        st.caption('Rating 0 berasal dari data Book-Crossing dan merepresentasikan rating implisit / tanpa penilaian numerik eksplisit.')
+        # Pertahankan distribusi dataset asli, sekaligus sediakan analisis
+        # untuk buku acuan dan setiap buku yang direkomendasikan.
+        rating_scope = st.radio(
+            'Lihat distribusi rating',
+            ['Seluruh dataset', 'Rating per buku'],
+            horizontal=True,
+            key='book_rating_scope',
+        )
+        if rating_scope == 'Seluruh dataset':
+            counts = df.bookRating.value_counts().sort_index().rename_axis('Rating').reset_index(name='Jumlah')
+            chart_layout(px.bar(counts, x='Rating', y='Jumlah', title='Distribusi rating seluruh buku'))
+            st.caption('Grafik mencakup semua buku pada dataset hasil filter, bukan hanya buku acuan atau hasil rekomendasi.')
+        else:
+            available_books = list(dict.fromkeys([name] + result['Buku rekomendasi'].tolist()))
+            selected_book = st.selectbox(
+                'Pilih buku acuan atau buku rekomendasi',
+                available_books,
+                key='book_rating_selected',
+            )
+            book_ratings = pd.to_numeric(
+                df.loc[df['bookTitle'] == selected_book, 'bookRating'],
+                errors='coerce',
+            ).dropna()
+            explicit = book_ratings[(book_ratings >= 1) & (book_ratings <= 10)]
+            implicit_count = int((book_ratings == 0).sum())
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric('Total interaksi', f'{len(book_ratings):,}')
+            c2.metric('Rating eksplisit', f'{len(explicit):,}')
+            c3.metric('Rata-rata rating (1–10)', f'{explicit.mean():.2f}' if len(explicit) else '—')
+            c4.metric('Rating 0 / implisit', f'{implicit_count:,}')
+            histogram = pd.DataFrame({'Rating': list(range(11))})
+            histogram['Jumlah'] = histogram['Rating'].map(book_ratings.value_counts()).fillna(0).astype(int)
+            fig = px.bar(
+                histogram, x='Rating', y='Jumlah',
+                title=f'Distribusi rating: {selected_book[:70]}',
+                text='Jumlah',
+            )
+            fig.update_xaxes(tickmode='array', tickvals=list(range(11)))
+            fig.update_traces(textposition='outside', cliponaxis=False)
+            chart_layout(fig)
+            st.caption('Rata-rata dihitung hanya dari rating eksplisit 1–10. Nilai 0 adalah interaksi implisit, bukan penilaian 0 dari 10.')
+        st.caption('Dalam Book-Crossing, rating 0 berarti interaksi tanpa penilaian numerik eksplisit. Data ini tidak setara dengan rating kosong pada matriks User-Based.')
     with t3:
         st.markdown('''**Mengikuti tahapan materi:**
 
