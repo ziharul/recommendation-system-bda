@@ -1237,32 +1237,91 @@ def render_movie():
 def render_user_cf():
     hero('AKTIVITAS 05 · COLLABORATIVE FILTERING', 'User-Based Collaborative Filtering', 'Mencari tetangga pengguna paling mirip dari pola rating film yang dicontohkan berdasarkan materi.')
     section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
-    up=st.file_uploader('Opsional: unggah CSV dengan kolom Pengguna, Film, Rating',type=['csv'],key='up_ub')
-    df=pd.read_csv(up) if up else EXAMPLE_RATINGS.copy()
-    if not {'Pengguna','Film','Rating'}.issubset(df.columns):st.error('Butuh kolom Pengguna, Film, Rating.');return
-    df=df[['Pengguna','Film','Rating']].dropna()
-    df['Rating']=pd.to_numeric(df['Rating'],errors='coerce');df=df.dropna(subset=['Rating'])
-    if df.Pengguna.nunique()<2:st.warning('Dibutuhkan minimal dua pengguna.');return
-    matrix, sim=ratings_matrix(df)
-    left,right=st.columns(2)
-    with left: user=st.selectbox('Pilih pengguna',matrix.index)
-    with right: threshold=st.slider('Minimal rating dari pengguna serupa',1,5,4)
-    neighbours=sim[user].drop(user).sort_values(ascending=False)
-    nearest=neighbours.index[0]
-    unseen=(matrix.loc[user]==0)&(matrix.loc[nearest]>=threshold)
-    recommendations=pd.DataFrame({'Film':matrix.columns[unseen], 'Rating pengguna serupa':matrix.loc[nearest,unseen].values})
+
+    # Data bawaan tetap dipertahankan. Pilihan demo disediakan supaya hasil
+    # rekomendasi bisa diuji tanpa mengubah dataset asli dari materi.
+    demo = EXAMPLE_RATINGS.copy()
+    demo = pd.concat([demo, pd.DataFrame([
+        {'Pengguna': 'Budi', 'Film': 'Interstellar', 'Rating': 4}
+    ])], ignore_index=True)
+    demo_csv = demo.to_csv(index=False).encode('utf-8-sig')
+    st.download_button('Unduh CSV demo (ada rekomendasi)', data=demo_csv,
+                       file_name='contoh_user_based_rekomendasi.csv', mime='text/csv',
+                       icon=':material/download:', key='download_demo_user_cf')
+    up = st.file_uploader('Opsional: unggah CSV dengan kolom Pengguna, Film, Rating',
+                          type=['csv'], key='up_ub')
+    use_demo = st.checkbox('Coba data demo yang menghasilkan rekomendasi (tanpa upload)',
+                            value=False, key='use_demo_user_cf', disabled=up is not None)
+
+    if up is not None:
+        try:
+            df = pd.read_csv(BytesIO(up.getvalue()), sep=None, engine='python', encoding='utf-8-sig')
+        except (ValueError, UnicodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+            st.error(f'CSV tidak dapat dibaca: {exc}')
+            return
+        source = f'File CSV: {up.name}'
+    elif use_demo:
+        df = demo.copy()
+        source = 'Data demo rekomendasi (tambahan rating Budi untuk Interstellar)'
+    else:
+        df = EXAMPLE_RATINGS.copy()
+        source = 'Data bawaan dari materi (tanpa film tambahan untuk Budi)'
+
+    df.columns = df.columns.astype(str).str.strip().str.replace('\ufeff', '', regex=False)
+    if not {'Pengguna', 'Film', 'Rating'}.issubset(df.columns):
+        st.error('CSV harus memiliki kolom Pengguna, Film, Rating. '
+                 f'Kolom yang terbaca: {", ".join(map(str, df.columns))}.')
+        return
+    df = df[['Pengguna', 'Film', 'Rating']].dropna().copy()
+    df['Pengguna'] = df['Pengguna'].astype(str).str.strip()
+    df['Film'] = df['Film'].astype(str).str.strip()
+    df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce')
+    df = df.dropna(subset=['Rating'])
+    df = df[(df['Pengguna'] != '') & (df['Film'] != '')]
+    if df.empty or df.Pengguna.nunique() < 2:
+        st.warning('Dibutuhkan minimal dua pengguna dengan data rating yang valid.')
+        return
+    # Tampilkan status data aktif agar jelas bahwa upload menggantikan data bawaan.
+    st.success(f'Dataset aktif: **{source}** · {len(df)} baris rating · '
+               f'{df.Pengguna.nunique()} pengguna · {df.Film.nunique()} film.')
+    with st.expander('Periksa data rating yang sedang digunakan', expanded=False):
+        compact_dataframe(df.head(30), hide_index=True, use_container_width=True)
+
+    matrix, sim = ratings_matrix(df)
+    left, right = st.columns(2)
+    with left:
+        user = st.selectbox('Pilih pengguna', matrix.index, key='selected_user_cf')
+    with right:
+        threshold = st.slider('Minimal rating dari pengguna serupa', 1, 5, 4, key='min_rating_user_cf')
+    neighbours = sim[user].drop(user).sort_values(ascending=False)
+    nearest = neighbours.index[0]
+    unseen = (matrix.loc[user] == 0) & (matrix.loc[nearest] >= threshold)
+    recommendations = pd.DataFrame({
+        'Film': matrix.columns[unseen],
+        'Rating pengguna serupa': matrix.loc[nearest, unseen].values,
+    })
     section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
-    metrics([('Pengguna',df.Pengguna.nunique()),('Film',df.Film.nunique()),('Tetangga terdekat',nearest),('Kemiripan',f'{float(neighbours.iloc[0]):.3f}')])
-    t1,t2,t3=st.tabs(['Hasil rekomendasi','Kemiripan pengguna','Matriks rating'])
+    metrics([('Pengguna', df.Pengguna.nunique()), ('Film', df.Film.nunique()),
+             ('Tetangga terdekat', nearest), ('Kemiripan', f'{float(neighbours.iloc[0]):.3f}')])
+    t1, t2, t3 = st.tabs(['Hasil rekomendasi', 'Kemiripan pengguna', 'Matriks rating'])
     with t1:
         st.write(f'Pengguna **{user}** paling mirip dengan **{nearest}**.')
-        if len(recommendations):show_table(recommendations,'user_based_rekomendasi.csv')
-        else:st.info('Tidak ada film baru dengan rating tetangga yang memenuhi batas ini. Kondisi ini mungkin terjadi pada dataset contoh yang sangat kecil.')
+        if len(recommendations):
+            show_table(recommendations, 'user_based_rekomendasi.csv')
+        else:
+            st.info('Tidak ada film baru dengan rating tetangga yang memenuhi batas ini. '
+                    'Untuk melihat hasil demo, centang opsi data demo di atas, '
+                    'pilih Andi, dan gunakan minimal rating 4.')
     with t2:
-        chart_layout(px.imshow(sim,x=sim.columns,y=sim.index,zmin=0,zmax=1,title='Cosine similarity antar pengguna'))
-        compact_dataframe(neighbours.rename('Skor kesamaan').reset_index().rename(columns={'index':'Pengguna lain'}),hide_index=True,use_container_width=True)
-    with t3:compact_dataframe(matrix,use_container_width=True)
-    note('Angka 0 pada matriks berarti <b>belum ada rating</b> (missing), bukan rating negatif. Penentuan rekomendasi mengikuti notebook: film yang belum dinilai pengguna target tetapi diberi rating tinggi oleh tetangga terdekat.')
+        chart_layout(px.imshow(sim, x=sim.columns, y=sim.index, zmin=0, zmax=1,
+                               title='Cosine similarity antar pengguna'))
+        compact_dataframe(neighbours.rename('Skor kesamaan').reset_index().rename(
+            columns={'index': 'Pengguna lain'}), hide_index=True, use_container_width=True)
+    with t3:
+        compact_dataframe(matrix, use_container_width=True)
+    note('Angka 0 pada matriks berarti <b>belum ada rating</b> (missing), bukan rating negatif. '
+         'Penentuan rekomendasi mengikuti notebook: film yang belum dinilai pengguna target '
+         'tetapi diberi rating tinggi oleh tetangga terdekat.')
 
 
 def render_item_cf():
@@ -1288,7 +1347,7 @@ def render_item_cf():
     dists,indices=model.kneighbors(sparse[index],n_neighbors=min(n+1,len(pivot)))
     rec=[]
     for j,d in zip(indices[0],dists[0]):
-        if j!=index: rec.append({'Buku rekomendasi':pivot.index[j],'Kemiripan (1 − jarak)':round(float(1-d),4),'Jarak cosine':round(float(d),4)})
+        if j!=index: rec.append({'Buku rekomendasi':pivot.index[j],'Skor Kemiripan':round(float(1-d),4)})
     result=pd.DataFrame(rec).head(n)
     section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Interaksi setelah filter',f'{len(df):,}'),('Buku',f'{len(pivot):,}'),('Pengguna',f'{len(pivot.columns):,}'),('Rekomendasi',len(result))])
@@ -1296,7 +1355,7 @@ def render_item_cf():
     with t1:
         if len(result):
             show_table(result,'item_based_buku.csv')
-            chart_layout(px.bar(result,x='Kemiripan (1 − jarak)',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
+            chart_layout(px.bar(result,x='Skor Kemiripan',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
     with t2:
         counts=df.bookRating.value_counts().sort_index().rename_axis('Rating').reset_index(name='Jumlah')
         chart_layout(px.bar(counts,x='Rating',y='Jumlah',title='Distribusi rating buku'))
@@ -1311,7 +1370,7 @@ def render_item_cf():
 5. Menghapus pasangan pengguna–judul yang duplikat, lalu membentuk matriks buku × pengguna untuk kNN cosine.
 
 **Catatan:** agar repo ringan, dashboard menyertakan data hasil penyaringan dari arsip sumber, bukan keseluruhan arsip mentah. Jumlah buku dapat berbeda bila CSV dibaca dengan kebijakan baris rusak yang berbeda.''')
-    note('Jarak cosine yang lebih kecil berarti pola rating buku lebih mirip. Skor ini mengukur kemiripan berdasarkan interaksi, bukan kesamaan isi cerita buku.')
+    note('Semakin tinggi <b>Skor Kemiripan</b> (mendekati 1), semakin mirip pola rating kedua buku. Skor ini dihitung dari cosine similarity berdasarkan rating pembaca, bukan kesamaan isi cerita buku.')
 
 
 def render_hybrid():
