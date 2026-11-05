@@ -544,7 +544,7 @@ with st.sidebar:
         </svg>
       </div>
       <div><div class="brand-title">Big Data Analytics</div>
-      <div class="brand-caption">Created by Kelompok 1 (Amila dan Ziharul)</div></div>
+      <div class="brand-caption">Created by Kelompok 2</div></div>
     </div><div class="side-rule"></div>''', unsafe_allow_html=True)
     for group_label, positions in NAV_GROUPS:
         st.markdown(f'<div class="side-section">{group_label}</div>', unsafe_allow_html=True)
@@ -1237,91 +1237,32 @@ def render_movie():
 def render_user_cf():
     hero('AKTIVITAS 05 · COLLABORATIVE FILTERING', 'User-Based Collaborative Filtering', 'Mencari tetangga pengguna paling mirip dari pola rating film yang dicontohkan berdasarkan materi.')
     section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
-
-    # Data bawaan tetap dipertahankan. Pilihan demo disediakan supaya hasil
-    # rekomendasi bisa diuji tanpa mengubah dataset asli dari materi.
-    demo = EXAMPLE_RATINGS.copy()
-    demo = pd.concat([demo, pd.DataFrame([
-        {'Pengguna': 'Budi', 'Film': 'Interstellar', 'Rating': 4}
-    ])], ignore_index=True)
-    demo_csv = demo.to_csv(index=False).encode('utf-8-sig')
-    st.download_button('Unduh CSV demo (ada rekomendasi)', data=demo_csv,
-                       file_name='contoh_user_based_rekomendasi.csv', mime='text/csv',
-                       icon=':material/download:', key='download_demo_user_cf')
-    up = st.file_uploader('Opsional: unggah CSV dengan kolom Pengguna, Film, Rating',
-                          type=['csv'], key='up_ub')
-    use_demo = st.checkbox('Coba data demo yang menghasilkan rekomendasi (tanpa upload)',
-                            value=False, key='use_demo_user_cf', disabled=up is not None)
-
-    if up is not None:
-        try:
-            df = pd.read_csv(BytesIO(up.getvalue()), sep=None, engine='python', encoding='utf-8-sig')
-        except (ValueError, UnicodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
-            st.error(f'CSV tidak dapat dibaca: {exc}')
-            return
-        source = f'File CSV: {up.name}'
-    elif use_demo:
-        df = demo.copy()
-        source = 'Data demo rekomendasi (tambahan rating Budi untuk Interstellar)'
-    else:
-        df = EXAMPLE_RATINGS.copy()
-        source = 'Data bawaan dari materi (tanpa film tambahan untuk Budi)'
-
-    df.columns = df.columns.astype(str).str.strip().str.replace('\ufeff', '', regex=False)
-    if not {'Pengguna', 'Film', 'Rating'}.issubset(df.columns):
-        st.error('CSV harus memiliki kolom Pengguna, Film, Rating. '
-                 f'Kolom yang terbaca: {", ".join(map(str, df.columns))}.')
-        return
-    df = df[['Pengguna', 'Film', 'Rating']].dropna().copy()
-    df['Pengguna'] = df['Pengguna'].astype(str).str.strip()
-    df['Film'] = df['Film'].astype(str).str.strip()
-    df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce')
-    df = df.dropna(subset=['Rating'])
-    df = df[(df['Pengguna'] != '') & (df['Film'] != '')]
-    if df.empty or df.Pengguna.nunique() < 2:
-        st.warning('Dibutuhkan minimal dua pengguna dengan data rating yang valid.')
-        return
-    # Tampilkan status data aktif agar jelas bahwa upload menggantikan data bawaan.
-    st.success(f'Dataset aktif: **{source}** · {len(df)} baris rating · '
-               f'{df.Pengguna.nunique()} pengguna · {df.Film.nunique()} film.')
-    with st.expander('Periksa data rating yang sedang digunakan', expanded=False):
-        compact_dataframe(df.head(30), hide_index=True, use_container_width=True)
-
-    matrix, sim = ratings_matrix(df)
-    left, right = st.columns(2)
-    with left:
-        user = st.selectbox('Pilih pengguna', matrix.index, key='selected_user_cf')
-    with right:
-        threshold = st.slider('Minimal rating dari pengguna serupa', 1, 5, 4, key='min_rating_user_cf')
-    neighbours = sim[user].drop(user).sort_values(ascending=False)
-    nearest = neighbours.index[0]
-    unseen = (matrix.loc[user] == 0) & (matrix.loc[nearest] >= threshold)
-    recommendations = pd.DataFrame({
-        'Film': matrix.columns[unseen],
-        'Rating pengguna serupa': matrix.loc[nearest, unseen].values,
-    })
+    up=st.file_uploader('Opsional: unggah CSV dengan kolom Pengguna, Film, Rating',type=['csv'],key='up_ub')
+    df=pd.read_csv(up) if up else EXAMPLE_RATINGS.copy()
+    if not {'Pengguna','Film','Rating'}.issubset(df.columns):st.error('Butuh kolom Pengguna, Film, Rating.');return
+    df=df[['Pengguna','Film','Rating']].dropna()
+    df['Rating']=pd.to_numeric(df['Rating'],errors='coerce');df=df.dropna(subset=['Rating'])
+    if df.Pengguna.nunique()<2:st.warning('Dibutuhkan minimal dua pengguna.');return
+    matrix, sim=ratings_matrix(df)
+    left,right=st.columns(2)
+    with left: user=st.selectbox('Pilih pengguna',matrix.index)
+    with right: threshold=st.slider('Minimal rating dari pengguna serupa',1,5,4)
+    neighbours=sim[user].drop(user).sort_values(ascending=False)
+    nearest=neighbours.index[0]
+    unseen=(matrix.loc[user]==0)&(matrix.loc[nearest]>=threshold)
+    recommendations=pd.DataFrame({'Film':matrix.columns[unseen], 'Rating pengguna serupa':matrix.loc[nearest,unseen].values})
     section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
-    metrics([('Pengguna', df.Pengguna.nunique()), ('Film', df.Film.nunique()),
-             ('Tetangga terdekat', nearest), ('Kemiripan', f'{float(neighbours.iloc[0]):.3f}')])
-    t1, t2, t3 = st.tabs(['Hasil rekomendasi', 'Kemiripan pengguna', 'Matriks rating'])
+    metrics([('Pengguna',df.Pengguna.nunique()),('Film',df.Film.nunique()),('Tetangga terdekat',nearest),('Kemiripan',f'{float(neighbours.iloc[0]):.3f}')])
+    t1,t2,t3=st.tabs(['Hasil rekomendasi','Kemiripan pengguna','Matriks rating'])
     with t1:
         st.write(f'Pengguna **{user}** paling mirip dengan **{nearest}**.')
-        if len(recommendations):
-            show_table(recommendations, 'user_based_rekomendasi.csv')
-        else:
-            st.info('Tidak ada film baru dengan rating tetangga yang memenuhi batas ini. '
-                    'Untuk melihat hasil demo, centang opsi data demo di atas, '
-                    'pilih Andi, dan gunakan minimal rating 4.')
+        if len(recommendations):show_table(recommendations,'user_based_rekomendasi.csv')
+        else:st.info('Tidak ada film baru dengan rating tetangga yang memenuhi batas ini. Kondisi ini mungkin terjadi pada dataset contoh yang sangat kecil.')
     with t2:
-        chart_layout(px.imshow(sim, x=sim.columns, y=sim.index, zmin=0, zmax=1,
-                               title='Cosine similarity antar pengguna'))
-        compact_dataframe(neighbours.rename('Skor kesamaan').reset_index().rename(
-            columns={'index': 'Pengguna lain'}), hide_index=True, use_container_width=True)
-    with t3:
-        compact_dataframe(matrix, use_container_width=True)
-    note('Angka 0 pada matriks berarti <b>belum ada rating</b> (missing), bukan rating negatif. '
-         'Penentuan rekomendasi mengikuti notebook: film yang belum dinilai pengguna target '
-         'tetapi diberi rating tinggi oleh tetangga terdekat.')
+        chart_layout(px.imshow(sim,x=sim.columns,y=sim.index,zmin=0,zmax=1,title='Cosine similarity antar pengguna'))
+        compact_dataframe(neighbours.rename('Skor kesamaan').reset_index().rename(columns={'index':'Pengguna lain'}),hide_index=True,use_container_width=True)
+    with t3:compact_dataframe(matrix,use_container_width=True)
+    note('Angka 0 pada matriks berarti <b>belum ada rating</b> (missing), bukan rating negatif. Penentuan rekomendasi mengikuti notebook: film yang belum dinilai pengguna target tetapi diberi rating tinggi oleh tetangga terdekat.')
 
 
 def render_item_cf():
@@ -1347,7 +1288,7 @@ def render_item_cf():
     dists,indices=model.kneighbors(sparse[index],n_neighbors=min(n+1,len(pivot)))
     rec=[]
     for j,d in zip(indices[0],dists[0]):
-        if j!=index: rec.append({'Buku rekomendasi':pivot.index[j],'Skor Kemiripan':round(float(1-d),4)})
+        if j!=index: rec.append({'Buku rekomendasi':pivot.index[j],'Kemiripan (1 − jarak)':round(float(1-d),4),'Jarak cosine':round(float(d),4)})
     result=pd.DataFrame(rec).head(n)
     section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
     metrics([('Interaksi setelah filter',f'{len(df):,}'),('Buku',f'{len(pivot):,}'),('Pengguna',f'{len(pivot.columns):,}'),('Rekomendasi',len(result))])
@@ -1355,50 +1296,11 @@ def render_item_cf():
     with t1:
         if len(result):
             show_table(result,'item_based_buku.csv')
-            chart_layout(px.bar(result,x='Skor Kemiripan',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
+            chart_layout(px.bar(result,x='Kemiripan (1 − jarak)',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
     with t2:
-        # Pertahankan distribusi dataset asli, sekaligus sediakan analisis
-        # untuk buku acuan dan setiap buku yang direkomendasikan.
-        rating_scope = st.radio(
-            'Lihat distribusi rating',
-            ['Seluruh dataset', 'Rating per buku'],
-            horizontal=True,
-            key='book_rating_scope',
-        )
-        if rating_scope == 'Seluruh dataset':
-            counts = df.bookRating.value_counts().sort_index().rename_axis('Rating').reset_index(name='Jumlah')
-            chart_layout(px.bar(counts, x='Rating', y='Jumlah', title='Distribusi rating seluruh buku'))
-            st.caption('Grafik mencakup semua buku pada dataset hasil filter, bukan hanya buku acuan atau hasil rekomendasi.')
-        else:
-            available_books = list(dict.fromkeys([name] + result['Buku rekomendasi'].tolist()))
-            selected_book = st.selectbox(
-                'Pilih buku acuan atau buku rekomendasi',
-                available_books,
-                key='book_rating_selected',
-            )
-            book_ratings = pd.to_numeric(
-                df.loc[df['bookTitle'] == selected_book, 'bookRating'],
-                errors='coerce',
-            ).dropna()
-            explicit = book_ratings[(book_ratings >= 1) & (book_ratings <= 10)]
-            implicit_count = int((book_ratings == 0).sum())
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric('Total interaksi', f'{len(book_ratings):,}')
-            c2.metric('Rating eksplisit', f'{len(explicit):,}')
-            c3.metric('Rata-rata rating (1–10)', f'{explicit.mean():.2f}' if len(explicit) else '—')
-            c4.metric('Rating 0 / implisit', f'{implicit_count:,}')
-            histogram = pd.DataFrame({'Rating': list(range(11))})
-            histogram['Jumlah'] = histogram['Rating'].map(book_ratings.value_counts()).fillna(0).astype(int)
-            fig = px.bar(
-                histogram, x='Rating', y='Jumlah',
-                title=f'Distribusi rating: {selected_book[:70]}',
-                text='Jumlah',
-            )
-            fig.update_xaxes(tickmode='array', tickvals=list(range(11)))
-            fig.update_traces(textposition='outside', cliponaxis=False)
-            chart_layout(fig)
-            st.caption('Rata-rata dihitung hanya dari rating eksplisit 1–10. Nilai 0 adalah interaksi implisit, bukan penilaian 0 dari 10.')
-        st.caption('Dalam Book-Crossing, rating 0 berarti interaksi tanpa penilaian numerik eksplisit. Data ini tidak setara dengan rating kosong pada matriks User-Based.')
+        counts=df.bookRating.value_counts().sort_index().rename_axis('Rating').reset_index(name='Jumlah')
+        chart_layout(px.bar(counts,x='Rating',y='Jumlah',title='Distribusi rating buku'))
+        st.caption('Rating 0 berasal dari data Book-Crossing dan merepresentasikan rating implisit / tanpa penilaian numerik eksplisit.')
     with t3:
         st.markdown('''**Mengikuti tahapan materi:**
 
@@ -1409,64 +1311,191 @@ def render_item_cf():
 5. Menghapus pasangan pengguna–judul yang duplikat, lalu membentuk matriks buku × pengguna untuk kNN cosine.
 
 **Catatan:** agar repo ringan, dashboard menyertakan data hasil penyaringan dari arsip sumber, bukan keseluruhan arsip mentah. Jumlah buku dapat berbeda bila CSV dibaca dengan kebijakan baris rusak yang berbeda.''')
-    note('Semakin tinggi <b>Skor Kemiripan</b> (mendekati 1), semakin mirip pola rating kedua buku. Skor ini dihitung dari cosine similarity berdasarkan rating pembaca, bukan kesamaan isi cerita buku.')
+    note('Jarak cosine yang lebih kecil berarti pola rating buku lebih mirip. Skor ini mengukur kemiripan berdasarkan interaksi, bukan kesamaan isi cerita buku.')
 
 
 def render_hybrid():
-    hero('AKTIVITAS 07 · HYBRID', 'Hybrid Recommendation System', 'Mengombinasikan content-based filtering (kemiripan genre) dan collaborative filtering (pola rating pengguna).')
-    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
-    movies=EXAMPLE_HYBRID.copy()
-    ratings=EXAMPLE_RATINGS.rename(columns={'Pengguna':'User','Film':'Movie'}).copy()
-    a,b=st.columns(2)
-    with a: target=st.selectbox('Pengguna target',sorted(ratings.User.unique()),index=1)
-    with b: cb_weight=st.slider('Bobot Content-Based',0.0,1.0,0.5,0.05)
-    cf_weight=1-cb_weight
-    tfidf=TfidfVectorizer()
-    X=tfidf.fit_transform(movies.Genre)
-    item_sim=pd.DataFrame(cosine_similarity(X),index=movies.Movie,columns=movies.Movie)
-    matrix=ratings.pivot_table(index='User',columns='Movie',values='Rating').fillna(0)
-    user_sim=pd.DataFrame(cosine_similarity(matrix),index=matrix.index,columns=matrix.index)
-    liked=ratings.loc[(ratings.User==target)&(ratings.Rating>=4),'Movie'].tolist()
-    rated=ratings.loc[ratings.User==target,'Movie'].tolist()
-    candidate=[movie for movie in movies.Movie if movie not in rated]
-    scores=[]
+    hero(
+        'AKTIVITAS 07 · HYBRID',
+        'Hybrid Recommendation System',
+        'Menggabungkan Content-Based Filtering (kemiripan genre film) dan '
+        'Collaborative Filtering (pola rating pengguna).'
+    )
+    section_heading(
+        'PENGATURAN ANALISIS', 'Parameter dan Dataset',
+        'Pilih pengguna dan tentukan seberapa besar pengaruh setiap metode terhadap rekomendasi.'
+    )
+    movies = EXAMPLE_HYBRID.copy()
+    ratings = EXAMPLE_RATINGS.rename(columns={'Pengguna':'User', 'Film':'Movie'}).copy()
+
+    left, right = st.columns(2)
+    with left:
+        target = st.selectbox('Pengguna target', sorted(ratings.User.unique()), index=1)
+    with right:
+        cb_weight = st.slider('Bobot Content-Based Filtering', 0.0, 1.0, 0.5, 0.05)
+    cf_weight = 1 - cb_weight
+
+    # Pertahankan algoritma dan dataset dari app.py asli. Tidak ada perubahan model.
+    tfidf = TfidfVectorizer()
+    X = tfidf.fit_transform(movies.Genre)
+    item_sim = pd.DataFrame(cosine_similarity(X), index=movies.Movie, columns=movies.Movie)
+    matrix = ratings.pivot_table(index='User', columns='Movie', values='Rating').fillna(0)
+    user_sim = pd.DataFrame(cosine_similarity(matrix), index=matrix.index, columns=matrix.index)
+    liked = ratings.loc[(ratings.User == target) & (ratings.Rating >= 4), 'Movie'].tolist()
+    rated = ratings.loc[ratings.User == target, 'Movie'].tolist()
+    candidate = [movie for movie in movies.Movie if movie not in rated]
+
+    scores = []
     for movie in candidate:
-        cb=float(np.mean([item_sim.loc[movie,x] for x in liked])) if liked else 0.0
-        cf=0.0
-        for other,sim in user_sim[target].drop(target).sort_values(ascending=False).items():
-            if movie in matrix.columns and matrix.loc[other,movie]>0:
-                cf=float(matrix.loc[other,movie]*sim)
+        cb = float(np.mean([item_sim.loc[movie, x] for x in liked])) if liked else 0.0
+        cf = 0.0
+        for other, sim in user_sim[target].drop(target).sort_values(ascending=False).items():
+            if movie in matrix.columns and matrix.loc[other, movie] > 0:
+                cf = float(matrix.loc[other, movie] * sim)
                 break
-        scores.append({'Film':movie,'CB Score':cb,'CF Score':cf})
-    score_df=pd.DataFrame(scores)
+        scores.append({
+            'Film': movie,
+            'Skor Content-Based': cb,
+            'Skor Collaborative Filtering': cf,
+        })
+
+    score_df = pd.DataFrame(scores)
     if not score_df.empty:
-        score_df[['CB Normalisasi','CF Normalisasi']]=MinMaxScaler().fit_transform(score_df[['CB Score','CF Score']])
-        score_df['Hybrid Score']=cb_weight*score_df['CB Normalisasi']+cf_weight*score_df['CF Normalisasi']
-        score_df=score_df.sort_values('Hybrid Score',ascending=False).reset_index(drop=True)
-    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
-    metrics([('Pengguna',target),('Film kandidat',len(candidate)),('Bobot CB',f'{cb_weight:.0%}'),('Bobot CF',f'{cf_weight:.0%}')])
-    t1,t2,t3=st.tabs(['Peringkat rekomendasi','Kontribusi metode','Data dan rumus'])
-    with t1:
-        if score_df.empty: st.info('Pengguna sudah memberi rating pada semua film; tidak ada kandidat baru.')
+        score_df[['Normalisasi Content-Based', 'Normalisasi Collaborative Filtering']] = (
+            MinMaxScaler().fit_transform(score_df[['Skor Content-Based', 'Skor Collaborative Filtering']])
+        )
+        score_df['Skor Akhir Hybrid'] = (
+            cb_weight * score_df['Normalisasi Content-Based']
+            + cf_weight * score_df['Normalisasi Collaborative Filtering']
+        )
+        score_df = score_df.sort_values('Skor Akhir Hybrid', ascending=False).reset_index(drop=True)
+
+    # Skor nol tetap dihitung dan tersedia sebagai kandidat, tetapi bukan hasil rekomendasi.
+    recommended_df = (score_df.loc[score_df['Skor Akhir Hybrid'] > 1e-10].copy()
+                      if not score_df.empty else score_df.copy())
+
+    section_heading('HASIL ANALISIS', 'Ringkasan Hasil',
+                    'Indikator utama berdasarkan parameter yang dipilih.')
+    metrics([
+        ('Pengguna', target),
+        ('Film kandidat', len(candidate)),
+        ('Film direkomendasikan', len(recommended_df)),
+    ])
+    metrics([
+        ('Bobot Content-Based Filtering', f'{cb_weight:.0%}'),
+        ('Bobot Collaborative Filtering', f'{cf_weight:.0%}'),
+    ])
+
+    tab_rekomendasi, tab_kontribusi, tab_rumus = st.tabs([
+        'Peringkat rekomendasi', 'Kontribusi metode', 'Data dan rumus'
+    ])
+    with tab_rekomendasi:
+        if score_df.empty:
+            st.info('Pengguna sudah memberi rating pada semua film; tidak ada kandidat baru.')
+        elif recommended_df.empty:
+            st.info('Belum ada film yang memperoleh Skor Akhir Hybrid di atas nol pada pengaturan ini.')
+            st.caption('Film kandidat dengan skor nol tetap dapat dilihat pada tab Data dan rumus.')
         else:
-            show_table(score_df,'hybrid_rekomendasi.csv')
-            chart_layout(px.bar(score_df,x='Hybrid Score',y='Film',orientation='h',title=f'Rekomendasi untuk {target}'))
-    with t2:
+            st.caption('Hanya film dengan Skor Akhir Hybrid di atas nol yang ditampilkan sebagai rekomendasi. '
+                       'Kandidat dengan skor nol ada di tab Data dan rumus.')
+            tampil = recommended_df[[
+                'Film', 'Normalisasi Content-Based',
+                'Normalisasi Collaborative Filtering', 'Skor Akhir Hybrid'
+            ]].copy()
+            show_table(tampil, 'hybrid_rekomendasi.csv')
+            chart_layout(px.bar(
+                recommended_df, x='Skor Akhir Hybrid', y='Film', orientation='h',
+                title=f'Rekomendasi untuk {target}'
+            ))
+            unggulan = recommended_df.iloc[0]
+            st.markdown(
+                f"**Cara membaca hasil:** {unggulan['Film']} memiliki skor akhir "
+                f"**{unggulan['Skor Akhir Hybrid']:.4f}**. Skor ini adalah nilai gabungan "
+                'untuk mengurutkan rekomendasi, **bukan rating film dan bukan peluang dalam persen**.'
+            )
+
+    with tab_kontribusi:
+        if not recommended_df.empty:
+            kontribusi = recommended_df[[
+                'Film', 'Normalisasi Content-Based', 'Normalisasi Collaborative Filtering'
+            ]].melt(id_vars='Film', var_name='Metode', value_name='Skor normalisasi')
+            kontribusi['Metode'] = kontribusi['Metode'].replace({
+                'Normalisasi Content-Based': 'Content-Based Filtering',
+                'Normalisasi Collaborative Filtering': 'Collaborative Filtering',
+            })
+            chart_layout(px.bar(
+                kontribusi, x='Film', y='Skor normalisasi', color='Metode',
+                barmode='group', title='Skor tiap metode sebelum diberi bobot'
+            ))
+            st.caption('Grafik menampilkan skor yang sudah disamakan skalanya (0–1) '
+                       'sebelum dikalikan dengan bobot. Batang yang lebih tinggi '
+                       'menunjukkan nilai normalisasi yang lebih besar untuk metode tersebut.')
+        else:
+            st.info('Tidak ada rekomendasi dengan skor positif untuk dibandingkan.')
+
+    with tab_rumus:
+        st.markdown('''#### Mengapa perlu normalisasi?
+
+Skor awal kedua metode **tidak menggunakan skala yang sama**. Skor Content-Based
+mengukur kemiripan genre, sedangkan skor Collaborative Filtering dihitung dari
+rating pengguna lain yang dikalikan dengan kemiripan antarpengguna. Jika kedua
+nilai langsung dijumlahkan, metode dengan angka lebih besar bisa terlalu mendominasi.
+
+**Normalisasi** mengubah setiap kelompok skor menjadi skala **0 sampai 1**,
+sehingga keduanya dapat digabungkan secara sebanding. Proses ini dilakukan
+**secara terpisah** untuk Content-Based Filtering dan Collaborative Filtering,
+berdasarkan film kandidat yang tersedia.
+
+`Nilai normalisasi = (skor awal − skor minimum) / (skor maksimum − skor minimum)`
+
+- **0** berarti skor paling rendah di antara kandidat pada metode tersebut.
+- **1** berarti skor paling tinggi di antara kandidat pada metode tersebut.
+- Nilai **1 tidak berarti 100% kemungkinan menyukai film**, dan nilai **0 tidak berarti film itu buruk**.
+
+Jika seluruh skor dalam satu metode sama, normalisasi pada contoh ini
+menghasilkan nol karena tidak ada perbedaan skor untuk dibandingkan.
+
+#### Bagaimana menghitung skor akhir Hybrid?
+
+`Skor Akhir Hybrid = (Bobot Content-Based Filtering × Normalisasi Content-Based) + (Bobot Collaborative Filtering × Normalisasi Collaborative Filtering)`
+
+Kedua bobot selalu berjumlah 100%. Semakin tinggi skor akhir, semakin tinggi
+peringkat film dalam rekomendasi **menurut model dan bobot yang dipilih**.
+Skor akhir bukan rating 1–5, persentase kecocokan, atau probabilitas.
+''')
+        if not recommended_df.empty:
+            unggulan = recommended_df.iloc[0]
+            nama = unggulan['Film']
+            mentah_konten = unggulan['Skor Content-Based']
+            mentah_kolaboratif = unggulan['Skor Collaborative Filtering']
+            normal_konten = unggulan['Normalisasi Content-Based']
+            normal_kolaboratif = unggulan['Normalisasi Collaborative Filtering']
+            total = unggulan['Skor Akhir Hybrid']
+            st.markdown(
+                f'**Contoh menggunakan hasil saat ini — {nama} untuk {target}:** '
+                f'Skor awal Content-Based **{mentah_konten:.4f}** menjadi **{normal_konten:.4f}** '
+                f'setelah normalisasi. Skor awal Collaborative Filtering '
+                f'**{mentah_kolaboratif:.4f}** menjadi **{normal_kolaboratif:.4f}** setelah normalisasi.'
+            )
+            st.markdown(
+                f'**Skor Akhir Hybrid** = ({cb_weight:.0%} × {normal_konten:.4f}) + '
+                f'({cf_weight:.0%} × {normal_kolaboratif:.4f}) = **{total:.4f}**.'
+            )
+        st.markdown('#### Seluruh film kandidat (termasuk skor nol)')
+        st.caption('Tabel berikut untuk memahami perhitungan. Film dengan skor nol '
+                   'tidak dimasukkan ke daftar peringkat rekomendasi.')
         if not score_df.empty:
-            plot=score_df[['Film','CB Normalisasi','CF Normalisasi']].melt(id_vars='Film',var_name='Komponen',value_name='Skor normalisasi')
-            chart_layout(px.bar(plot,x='Film',y='Skor normalisasi',color='Komponen',barmode='group',title='Skor tiap metode sebelum diberi bobot'))
-    with t3:
-        st.markdown('''**Perhitungan (sesuai notebook):**
+            compact_dataframe(score_df, hide_index=True, use_container_width=True)
+        st.markdown('#### Dataset contoh yang dipakai')
+        with st.expander('Lihat data film dan rating pengguna'):
+            st.markdown('**Data film**')
+            compact_dataframe(movies, hide_index=True, use_container_width=True)
+            st.markdown('**Data rating pengguna**')
+            compact_dataframe(ratings, hide_index=True, use_container_width=True)
 
-- **CB Score** = rata-rata kesamaan genre film kandidat terhadap film yang disukai pengguna (rating ≥ 4).
-- **CF Score** = rating tetangga terdekat yang pernah menilai film kandidat × kemiripan pengguna.
-- **Normalisasi** = MinMaxScaler, dilakukan terpisah untuk CB dan CF pada film kandidat.
-- **Hybrid Score** = `(bobot CB × CB Normalisasi) + (bobot CF × CF Normalisasi)`.
-
-Skor merupakan peringkat internal contoh ini, **bukan probabilitas** seorang pengguna akan menyukai film.''')
-        compact_dataframe(movies,hide_index=True,use_container_width=True)
-        compact_dataframe(ratings,hide_index=True,use_container_width=True)
-    note('Data dan formula dipertahankan dari notebook Hybrid pada materi. Bobot dapat diganti untuk melihat pengaruh pendekatan berbasis konten dan pengguna terhadap urutan rekomendasi.')
+    note('Hybrid menggabungkan kemiripan genre dan pola rating pengguna. '
+         'Geser bobot untuk melihat perubahan peringkat rekomendasi. '
+         'Film dengan skor akhir nol tetap dihitung, tetapi tidak ditampilkan sebagai rekomendasi.')
 
 
 if page==NAV[0]: render_overview()
