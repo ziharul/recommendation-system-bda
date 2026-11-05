@@ -1201,7 +1201,35 @@ def render_movie():
         chart_layout(px.bar(top_genres,x='Jumlah film',y='Genre',orientation='h',title='18 genre paling umum'))
         compact_dataframe(top_genres,hide_index=True,use_container_width=True)
     with tab3:
-        compact_dataframe(frame[['title_year','genres','year']].head(200),hide_index=True,use_container_width=True)
+        st.markdown('**Cari film dalam dataset MovieLens**')
+        st.caption('Ketik sebagian judul untuk mencari di seluruh katalog film. Data ini memuat judul, genre, dan tahun; bukan sinopsis cerita.')
+        search_title = st.text_input(
+            'Cari judul film',
+            placeholder='Contoh: Inception, Toy Story, Titanic',
+            key='movie_dataset_search',
+        ).strip()
+        # Pencarian berlaku untuk seluruh film valid, tidak hanya 200 baris awal.
+        dataset_view = frame[['title_year', 'genres', 'year']]
+        if search_title:
+            dataset_view = dataset_view[
+                dataset_view['title_year'].str.contains(search_title, case=False, regex=False, na=False)
+            ]
+        else:
+            st.caption(f'Film acuan saat ini: **{title}** | Genre: **{frame.loc[ix, "genres"]}**')
+
+        st.caption(f'**{len(dataset_view):,} film** cocok dengan pencarian.' if search_title
+                   else f'**{len(dataset_view):,} film** tersedia dalam dataset.')
+        if dataset_view.empty:
+            st.info('Judul tidak ditemukan. Coba gunakan sebagian kata dari judul film.')
+        else:
+            compact_dataframe(
+                dataset_view.head(50).rename(columns={
+                    'title_year': 'Judul film', 'genres': 'Genre', 'year': 'Tahun',
+                }),
+                hide_index=True, use_container_width=True,
+            )
+            if len(dataset_view) > 50:
+                st.caption('Menampilkan 50 hasil pertama. Ketik judul lebih spesifik untuk mempersempit hasil.')
         st.caption('Rating.csv juga tersedia dari Movie.zip, tetapi notebook Content_Based_Filtering_ML menggunakan fitur genre dari movie.csv untuk metode ini.')
     note('Untuk menghemat memori, dashboard menghitung kemiripan film yang dipilih terhadap semua film, bukan membangun matriks kemiripan penuh 9.000 × 9.000. Rumus cosine similarity tetap setara.')
 
