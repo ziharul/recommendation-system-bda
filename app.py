@@ -405,6 +405,99 @@ def show_delete_candidate_dialog(candidate_id: str, candidate_name: str):
                 st.rerun()
 
 
+@st.dialog("Detail Lengkap Kandidat", width="large")
+def show_candidate_detail_dialog(candidate_id: str):
+    """Read-only candidate profile, including every field in the entry form."""
+    person = C.get(candidate_id)
+    if not person:
+        st.warning("Data kandidat tidak ditemukan. Muat ulang halaman dan coba kembali.")
+        return
+
+    st.markdown(f"### {html.escape(str(person.get('nama') or 'Tanpa Nama'))}")
+    st.caption(f"ID Kandidat: {candidate_id} · Informasi ditampilkan dari PostgreSQL (hanya baca).")
+
+    def show_detail_field(label: str, value):
+        content = "—" if value is None or not str(value).strip() else str(value)
+        st.markdown(
+            '<div style="padding:10px 13px;margin:2px 0 8px;'
+            'background:#f8faff;border:1px solid #e6edf5;border-radius:10px;min-height:58px">'
+            f'<div style="color:#72839a;font-size:.73rem;font-weight:700;margin-bottom:4px">{html.escape(label)}</div>'
+            f'<div style="color:#193553;font-size:.88rem;white-space:pre-wrap;overflow-wrap:anywhere">{html.escape(content)}</div>'
+            '</div>', unsafe_allow_html=True,
+        )
+
+    sections = [
+        ("01 · Identitas & Kontak", [
+            ("Nama Lengkap", person.get("nama")),
+            ("Email", person.get("email")),
+            ("No. HP / WA", person.get("telepon")),
+            ("Kota / Kabupaten", person.get("kota")),
+            ("Alamat Domisili", person.get("alamat")),
+        ]),
+        ("02 · Pendidikan", [
+            ("Asal Perguruan Tinggi", person.get("kampus")),
+            ("Program Studi / Jurusan", person.get("prodi")),
+            ("Jenjang", person.get("jenjang")),
+            ("IPK", f"{_float(person.get('ipk')):.2f}"),
+            ("Semester", person.get("semester")),
+            ("Status Perkuliahan", person.get("status_kuliah")),
+        ]),
+        ("03 · Pengalaman & Kompetensi", [
+            ("Pengalaman Magang / Kerja", person.get("pengalaman_kerja")),
+            ("Pengalaman Organisasi", person.get("pengalaman_organisasi")),
+            ("Proyek / Portofolio", person.get("portofolio")),
+            ("Keahlian Utama", person.get("keahlian")),
+            ("Tools / Software", person.get("tools")),
+            ("Sertifikasi / Pelatihan", person.get("sertifikasi")),
+            ("Tautan LinkedIn / Portofolio", person.get("link")),
+        ]),
+        ("04 · Preferensi Magang & Berkas", [
+            ("Posisi / Bidang Magang", person.get("bidang")),
+            ("Bersedia WFO", person.get("wfo")),
+            ("Durasi Magang (bulan)", person.get("durasi")),
+            ("Dapat Mulai Tanggal", person.get("mulai")),
+            ("Status CV / Berkas", person.get("status_cv")),
+            ("Motivasi / Harapan Magang", person.get("motivasi")),
+        ]),
+    ]
+    for heading, fields in sections:
+        st.markdown(f"#### {heading}")
+        for n in range(0, len(fields), 2):
+            pair = st.columns(2, gap="small")
+            for col, (label, value) in zip(pair, fields[n:n + 2]):
+                with col:
+                    show_detail_field(label, value)
+
+    st.markdown("#### 05 · Informasi Interview")
+    interview = I.get(candidate_id)
+    if not interview:
+        st.info("Belum ada hasil interview yang tersimpan untuk kandidat ini.")
+    else:
+        final_score, recommendation = calculate(interview, weights, high, mid)
+        batch_code = interview.get("batch")
+        interview_fields = [
+            ("Tanggal Interview", interview.get("tanggal")),
+            ("Batch Rekrutmen", batch_label(batch_code) if batch_code else "Belum ditentukan"),
+            ("Pewawancara", interview.get("pewawancara")),
+            ("Skor Akhir", f"{final_score:.1f} / 100" if final_score is not None else "Belum lengkap"),
+            ("Rekomendasi Sistem", recommendation if final_score is not None else "Belum dinilai lengkap"),
+            ("Keputusan Akhir", interview.get("keputusan")),
+        ]
+        interview_fields.extend((label, f"{interview.get(key, 0)} / 5" if interview.get(key) else "Belum dinilai")
+                                for key, label, _ in ASPEK)
+        interview_fields.extend([
+            ("Kelebihan / Kekuatan", interview.get("kelebihan")),
+            ("Hal yang Perlu Ditingkatkan", interview.get("peningkatan")),
+            ("Catatan / Tindak Lanjut", interview.get("catatan")),
+        ])
+        for n in range(0, len(interview_fields), 2):
+            pair = st.columns(2, gap="small")
+            for col, (label, value) in zip(pair, interview_fields[n:n + 2]):
+                with col:
+                    show_detail_field(label, value)
+    st.caption("Jendela ini hanya menampilkan data; tidak menyimpan atau mengubah informasi kandidat.")
+
+
 with st.sidebar:
     st.markdown('<div class="brand"><div class="brand-icon">◈</div><div><div class="brand-title">Internship Hub</div><div class="brand-subtitle">Recruitment & Assessment</div></div></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-divider"></div><div class="nav-caption">MENU UTAMA</div>', unsafe_allow_html=True)
@@ -840,6 +933,25 @@ elif menu == "Data Kandidat":
     stat3.metric("Email Belum Terisi", selected_count - email_count)
     if preview_rows:
         _shortlist_table(preview_rows)
+        st.markdown("**Lihat Detail Kandidat**")
+        detail_left, detail_right = st.columns([3, 1], gap="medium", vertical_alignment="bottom")
+        with detail_left:
+            detail_candidate_id = st.selectbox(
+                "Pilih kandidat dari hasil filter",
+                [row["ID"] for row in preview_rows],
+                format_func=lambda candidate_id: (
+                    f"{candidate_id} — {C.get(candidate_id, {}).get('nama', '')}"
+                ),
+                key="candidate_preview_detail_choice",
+            )
+        with detail_right:
+            if st.button(
+                "🔎 Lihat Detail",
+                key="open_candidate_preview_detail",
+                use_container_width=True,
+                help="Tampilkan seluruh data kandidat dan informasi interview dalam satu jendela.",
+            ):
+                show_candidate_detail_dialog(detail_candidate_id)
         try:
             excel_bytes = _candidate_invitation_xlsx(export_rows)
             st.download_button(
