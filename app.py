@@ -1,1166 +1,2030 @@
-"""Sistem Pendataan & Interview Peserta Magang — Streamlit.
-
-Run: streamlit run app.py
-Storage: Supabase PostgreSQL (persistent) + optional Excel export/import.
-"""
+"""Big Data Analytics — tujuh aktivitas Recommendation System."""
 from __future__ import annotations
 
-import csv
-import html
-import hashlib
-from datetime import date, datetime
-from io import StringIO
+from io import BytesIO
+from hashlib import sha256
 from pathlib import Path
-import hmac
+import re
 
-import altair as alt
-
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
-
-from db_store import (
-    DatabaseOperationError, configured, load_records, save_candidate, save_interview, import_backup,
-    delete_candidate, reserve_candidate_id,
-)
-
-from data_store import (
-    ASPEK,
-    DECISIONS,
-    MAX_KANDIDAT,
-    calculate,
-    export_xlsx,
-    get_rubric_and_questions,
-    ranking_rows,
-    read_xlsx,
-    batch_label, make_batch_code, parse_batch_code,
-)
+from mlxtend.preprocessing import TransactionEncoder
+from mlxtend.frequent_patterns import apriori, association_rules
+from scipy.sparse import csr_matrix
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import MinMaxScaler
 
 st.set_page_config(
-    page_title="Interview Peserta Magang",
-    page_icon="📋",
+    page_title="RECOMSYS | Big Data Analytics",
+    page_icon=":material/psychology:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+ROOT = Path(__file__).resolve().parent
+DATA = ROOT / "data"
 
-st.markdown("""
+# Semua elemen visual memakai palet Light Analytics. Pengaturan warna widget
+# mengikuti .streamlit/config.toml yang disertakan bersama app.py.
+st.markdown('''
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-:root {--navy:#102743;--muted:#62748a;--line:#e5ebf3;--blue:#3567d8;--pale:#f5f8fd;}
-html,body,[class*="css"],[data-testid="stApp"]{font-family:'DM Sans',sans-serif;color:#1b324d}
-[data-testid="stAppViewContainer"]{background:#f5f8fc}
-[data-testid="stHeader"]{background:#f5f8fc;opacity:.95}
-.block-container{max-width:1380px;padding:2.1rem 2.8rem 3.2rem}
-h1,h2,h3,h4{font-family:'Plus Jakarta Sans',sans-serif!important;letter-spacing:-.04em!important;color:#102743!important}
-h1{font-size:2.0rem!important;font-weight:800!important;margin:0 0 .4rem!important}
-h2{font-size:1.35rem!important}h3{font-size:1.12rem!important}
-p{line-height:1.6}
-[data-testid="stSidebar"]{background:#fff;border-right:1px solid #e4eaf2}
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:.30rem}
-[data-testid="stSidebar"]{min-width:265px;max-width:290px}
-/* The navigation is made of plain clickable buttons, without radio circles. */
-[data-testid="stSidebar"] .st-key-main_navigation{margin-bottom:-.12rem}
-[data-testid="stSidebar"] .st-key-main_navigation button{
-    min-height:43px!important;height:43px!important;width:100%;
-    border:1px solid transparent!important;border-radius:10px!important;
-    background:transparent!important;color:#4c607a!important;
-    justify-content:flex-start!important;text-align:left!important;
-    padding:0 13px!important;font-size:.86rem!important;font-weight:600!important;
-    box-shadow:none!important;transition:background .15s ease,color .15s ease;
+:root {
+  --page:#F4F7FB; --paper:#FFFFFF; --navy:#172B4D; --ink:#334155;
+  --muted:#64748B; --line:#E2E8F0; --blue:#2563EB; --softblue:#EFF5FF;
+  --shadow:0 3px 15px rgba(20,47,87,.035);
 }
-[data-testid="stSidebar"] .st-key-main_navigation button:hover{
-    background:#f0f5fc!important;color:#1b4ca9!important;
+html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {background:var(--page);color:var(--ink);}
+[data-testid="stHeader"] {background:rgba(244,247,251,.97);}
+.block-container {max-width:1290px;padding:1.45rem 2rem 3rem;}
+/* Stable, consistent spacing across Streamlit's repeated containers. */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {gap:.88rem;}
+[data-testid="stVerticalBlock"] {gap:.8rem;}
+[data-testid="stHorizontalBlock"] {gap:1rem;align-items:stretch;}
+[data-testid="column"] {min-width:0;}
+[data-testid="stSidebar"] {background:#FFFFFF;border-right:1px solid var(--line);min-width:288px;max-width:315px;}
+[data-testid="stSidebar"] > div:first-child {background:#FFFFFF;}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap:.26rem;}
+[data-testid="stSidebar"] .stButton {margin:.04rem 0;}
+[data-testid="stSidebar"] .stButton > button {
+  display:flex;align-items:center;justify-content:flex-start;width:100%;
+  min-height:40px;text-align:left;padding:.57rem .76rem;border:1px solid transparent;
+  border-radius:9px;background:transparent;color:#475569;font-weight:500;font-size:.84rem;
+  transition:background .15s ease, color .15s ease, border-color .15s ease;
 }
-[data-testid="stSidebar"] .st-key-main_navigation button[kind="primary"]{
-    background:#eaf1ff!important;color:#2355b3!important;
-    border:1px solid #dce8ff!important;box-shadow:inset 3px 0 0 #3567d8!important;
-    font-weight:800!important;
+[data-testid="stSidebar"] .stButton > button p {font-size:.84rem;line-height:1.3;}
+[data-testid="stSidebar"] .stButton > button:hover {background:#F2F6FD;color:#1D4ED8;border-color:#E0E9F8;}
+.side-brand {display:flex;align-items:center;gap:11px;padding:9px 2px 14px;}
+.brand-icon {width:42px;height:42px;border-radius:12px;background:#EAF1FF;display:flex;justify-content:center;align-items:center;flex-shrink:0;}
+.brand-title {color:#152A49;font-size:15px;font-weight:750;line-height:1.25;}
+.brand-caption {color:#7A8AA2;font-size:11px;margin-top:3px;}
+.side-section {color:#8392AA;font-size:10px;font-weight:800;letter-spacing:.095em;margin:13px 0 6px 6px;}
+.side-rule {height:1px;background:#E7EDF4;margin:3px 0 8px;}
+.side-footer {border-top:1px solid #E5EBF3;margin-top:19px;padding-top:15px;display:flex;align-items:center;gap:10px;color:#62748F;font-size:11px;}
+.side-footer strong {color:#34445C;font-size:12px;}
+/* Shared page header, navigation spacing and data summary cards. */
+h1,h2,h3,h4 {color:var(--navy);letter-spacing:-.025em;}
+h2 {margin-top:.45rem;}
+.hero {background:linear-gradient(116deg,#FFFFFF 0%,#FFFFFF 72%,#EFF5FF 100%);
+  padding:23px 27px;border:1px solid var(--line);border-radius:17px;
+  margin:0 0 10px;box-shadow:var(--shadow);}
+.hero h1 {font-size:1.83rem;line-height:1.22;margin:0 0 8px;color:var(--navy);font-weight:780;}
+.hero p {font-size:.89rem;line-height:1.55;color:var(--muted);margin:0;max-width:850px;}
+.eyebrow {font-size:10px;color:var(--blue);font-weight:800;letter-spacing:.095em;margin-bottom:9px;}
+.section-head {margin:15px 0 8px;}
+.section-head.tight {margin:15px 0 2px;}
+.section-kicker {font-size:10px;color:var(--blue);font-weight:800;letter-spacing:.09em;}
+.section-title {font-size:1.27rem;color:var(--navy);font-weight:760;letter-spacing:-.022em;margin:4px 0;line-height:1.25;}
+.section-desc {color:var(--muted);font-size:.83rem;line-height:1.53;}
+/* Compact and truly balanced metric cards on every analysis page. */
+[data-testid="stMetric"] {background:#FFFFFF;border:1px solid var(--line);border-radius:13px;
+  min-height:92px;padding:13px 16px;box-shadow:var(--shadow);}
+[data-testid="stMetricLabel"] {color:#64748B;font-size:.8rem;}
+[data-testid="stMetricValue"] {color:#172B4D;font-weight:760;font-size:1.8rem;line-height:1.17;}
+[data-testid="stMetricDelta"] {font-size:.75rem;}
+/* Borders use the same token, shadows kept subtle and controls never oversized. */
+/* Native st.container(border=True) already supplies a border. Do not add a second one to every nested block. */
+[data-testid="stForm"] {background:#FFFFFF;border:1px solid var(--line);border-radius:14px;
+  padding:15px 17px;box-shadow:var(--shadow);}
+[data-testid="stForm"] [data-testid="stVerticalBlock"] {gap:.65rem;}
+[data-testid="stFileUploaderDropzone"] {background:#FCFDFF;border:1px dashed #C8D7EA;border-radius:11px;padding:10px 12px;}
+[data-testid="stFileUploader"] label,[data-testid="stWidgetLabel"] p {font-size:.86rem;color:#34445C;font-weight:600;}
+.stSelectbox [data-baseweb="select"] > div,.stNumberInput input,.stTextInput input,
+.stMultiSelect [data-baseweb="select"] > div {border-radius:9px;background:#FFFFFF;}
+/* Separate tab buttons from content without leaving a large empty panel. */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {gap:5px;border-bottom:1px solid #E1E8F1;padding-bottom:5px;}
+[data-testid="stTabs"] [data-baseweb="tab"] {background:transparent;border-radius:9px;padding:7px 13px;
+  color:#64748B;font-weight:600;font-size:.86rem;border:1px solid transparent;}
+[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {background:#EAF1FF;color:#1D4ED8;border-color:#DCE8FC;}
+[data-testid="stTabs"] [data-baseweb="tab-panel"] {padding-top:12px;}
+[data-testid="stDataFrame"] {border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#FFF;}
+[data-testid="stPlotlyChart"] {background:#FFFFFF;border:0;border-radius:13px;padding:4px;box-shadow:none;}
+.stDownloadButton button {border:1px solid #C7D8FB;background:#EFF5FF;color:#1D4ED8;
+  border-radius:9px;font-size:.83rem;font-weight:650;min-height:35px;}
+.stDownloadButton button:hover {background:#E3EEFF;color:#1D4ED8;}
+.stButton button[kind="primary"],.stFormSubmitButton button[kind="primary"] {
+  background:#2563EB;color:#FFF;border-color:#2563EB;border-radius:9px;font-weight:650;}
+.stButton button[kind="primary"]:hover,.stFormSubmitButton button[kind="primary"]:hover {background:#1D4ED8;border-color:#1D4ED8;}
+.note {padding:12px 15px;margin:12px 0;background:#EEF5FF;border-left:3px solid var(--blue);
+  border-radius:9px;color:#334155;font-size:.84rem;line-height:1.55;}
+.smallcap {color:#7C8BA4;font-size:12px;}
+/* Overview: cards only as tall as their content; consistent typography and spacing. */
+.module-top {display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
+.module-icon {width:40px;height:40px;border-radius:11px;display:flex;align-items:center;
+  justify-content:center;font-size:20px;flex-shrink:0;}
+.module-index {font-size:10px;color:#90A0B7;font-weight:750;letter-spacing:.045em;}
+.module-title {font-size:1.08rem;font-weight:780;color:#172B4D;margin:0 0 6px;line-height:1.3;}
+.module-desc {font-size:.84rem;line-height:1.52;color:#64748B;margin:0 0 12px;min-height:0;}
+.module-divider {height:1px;background:#E7ECF4;margin:9px 0;}
+.module-label {font-size:.73rem;font-weight:760;color:#334155;margin:0 0 3px;}
+.module-study {color:#475569;font-size:.8rem;line-height:1.47;margin:0 0 8px;min-height:0;}
+.module-outcome {border-radius:9px;padding:9px 11px;margin:8px 0 7px;}
+.module-outcome-label {font-size:9px;color:#64748B;font-weight:750;letter-spacing:.04em;}
+.module-outcome-text {font-size:.81rem;font-weight:730;margin-top:3px;line-height:1.4;}
+.module-foot {color:#7C8BA4;font-size:.73rem;padding:0;margin:0;}
+/* Buttons inside module cards become compact and visually aligned. */
+/* Only overview navigation buttons share this style; other page buttons remain native. */
+[class*="st-key-overview_"] button {min-height:36px;min-width:0;border-radius:10px;
+  font-weight:680;background:#F8FAFF;border:1px solid #D9E4F4;color:#254265;box-shadow:none;}
+[class*="st-key-overview_"] button p {font-size:.90rem !important;white-space:nowrap !important;}
+[class*="st-key-overview_"] button:hover {border-color:#9CB9F5;background:#EAF1FF;color:#1D4ED8;}
+[class*="st-key-overview_3"] button,[class*="st-key-overview_4"] button {background:#F8F4FF;color:#6D28D9;border-color:#E7DBFE;}
+[class*="st-key-overview_5"] button,[class*="st-key-overview_6"] button {background:#F0FBF7;color:#047857;border-color:#CDEFE2;}
+[class*="st-key-overview_7"] button {background:#FFF7EF;color:#C2410C;border-color:#FEDFC8;}
+.workflow-card {background:#FFFFFF;border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+  margin:7px 0 12px;box-shadow:var(--shadow);}
+.workflow-title {font-size:.95rem;color:#172B4D;font-weight:750;margin:0 0 11px;}
+.workflow-line {display:flex;flex-wrap:wrap;align-items:center;gap:7px;}
+.workflow-step {background:#EFF5FF;color:#1D4ED8;font-size:.78rem;font-weight:650;
+  border:1px solid #DBE9FF;border-radius:8px;padding:8px 10px;}
+.workflow-arrow {color:#9FB0CA;font-weight:800;}
+@media(max-width:950px) {
+ .block-container{padding:1rem 1rem 2rem;}
+ .hero{padding:19px 20px;}.hero h1{font-size:1.6rem;}
+ [data-testid="stHorizontalBlock"]{gap:.65rem;}
+ .workflow-arrow{display:none;}
 }
-[data-testid="stSidebar"] .st-key-main_navigation button [data-testid="stIconMaterial"]{font-size:1.15rem}
-[data-testid="stSidebar"] .st-key-signout_panel button{
-    width:100%;min-height:40px!important;border-radius:10px!important;
-    border:1px solid #e0e8f2!important;background:#fff!important;
-    color:#536780!important;justify-content:flex-start!important;
-    font-weight:650!important;
+
+/* V3: gutters and containment: keep *every* panel inside its allocated column. */
+*,*::before,*::after {box-sizing:border-box;}
+[data-testid="stMain"], [data-testid="stMainBlockContainer"] {min-width:0;max-width:100%;overflow-x:clip;}
+.block-container {width:100%;max-width:1210px;padding:2rem clamp(1.3rem,3vw,2.7rem) 3.5rem;}
+[data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"],
+[data-testid="column"], [data-testid="stElementContainer"] {min-width:0;max-width:100%;}
+/* CSS layout containment prevents long words / chart labels from growing grid columns. */
+[data-testid="column"] {overflow-wrap:anywhere;}
+[data-testid="stHorizontalBlock"] {gap:1.5rem;}
+/* V3 applied padding and borders to *every* internal Streamlit wrapper.
+   Leave the native panel alone and target only the intended overview cards. */
+[data-testid="stVerticalBlockBorderWrapper"] {min-width:0;max-width:100%;}
+[data-testid="stVerticalBlockBorderWrapper"] > div {min-width:0;max-width:100%;}
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {min-width:0;}
+/* One border per visible module; subtle highlights provide visual interest without extra boxes. */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.module-top) {border-radius:16px;}
+.module-top + .module-title {margin-top:0;}
+/* Forms and metrics keep sufficient breathing room at all screen sizes. */
+[data-testid="stMetric"] {padding:20px 24px;min-height:103px;border-radius:15px;max-width:100%;}
+[data-testid="stForm"] {padding:23px 25px;border-radius:15px;max-width:100%;overflow:hidden;}
+[data-testid="stFileUploaderDropzone"] {padding:18px 19px;max-width:100%;}
+.hero {padding:29px 32px;max-width:100%;margin-bottom:15px;}
+.note {padding:18px 22px;max-width:100%;}
+.section-head {margin:20px 0 12px;}
+/* Module cards: more distance from outline, but never fill excessive vertical space. */
+.module-top {margin-bottom:14px;}
+.module-title {margin:0 0 9px;line-height:1.35;}
+.module-desc {margin:0 0 14px;line-height:1.62;}
+.module-divider {margin:13px 0;}
+.module-study {margin:5px 0 13px;line-height:1.57;}
+.module-outcome {margin:12px 0 11px;padding:15px 17px;border-radius:11px;max-width:100%;}
+.module-foot {margin-bottom:7px;}
+/* Plotly charts and data grids must never extend past their parent card. */
+[data-testid="stPlotlyChart"] {
+  min-width:0;max-width:100%;width:100%;
+  overflow:hidden;padding:18px 20px;border-radius:15px;
 }
-[data-testid="stSidebar"] .st-key-signout_panel button:hover{background:#fff0f0!important;color:#bd3f4a!important;border-color:#f4d9dd!important}
-[data-testid="stSidebar"] [data-testid="stExpander"]{box-shadow:none!important;border:1px solid #e4ebf3!important}
-[data-testid="stSidebar"] [data-testid="stExpander"] summary{font-size:.83rem!important;font-weight:700!important}
-[data-testid="stSidebar"] [data-testid="stFileUploader"]{background:#f7f9fc;border-radius:12px;border:1px dashed #c9d5e6;padding:5px}
-[data-testid="stForm"]{background:#fff;border:1px solid #e2eaf3;border-radius:18px;padding:24px 28px;box-shadow:0 8px 28px rgba(27,60,104,.025)}
-[data-testid="stExpander"]{border-radius:12px;border:1px solid #e4ebf3;background:#fff}
-[data-testid="stDataFrame"]{border:1px solid #e7edf3;border-radius:13px;overflow:hidden;background:#fff}
-[data-testid="stTabs"] [data-baseweb="tab-list"]{gap:10px}
-[data-testid="stTabs"] [data-baseweb="tab"]{border-radius:9px 9px 0 0;padding:10px 14px;font-weight:600}
-[data-testid="stButton"] button,[data-testid="stFormSubmitButton"] button,[data-testid="stDownloadButton"] button{border-radius:10px;font-weight:700;min-height:42px}
-[data-testid="stButton"] button[kind="primary"],[data-testid="stFormSubmitButton"] button[kind="primary"],[data-testid="stDownloadButton"] button[kind="primary"]{background:#315fd4;border:1px solid #315fd4;color:#fff}
-[data-testid="stButton"] button[kind="primary"]:hover,[data-testid="stFormSubmitButton"] button[kind="primary"]:hover{background:#214aae;border-color:#214aae}
-[data-testid="stTextInput"] input,[data-testid="stNumberInput"] input,[data-testid="stTextArea"] textarea{border-radius:9px}
-[data-testid="stAlert"]{border-radius:12px}
-[data-testid="stMetric"]{border-radius:13px;border:1px solid var(--line);background:#fff;padding:17px 18px}
-[data-testid="stMetricValue"]{color:var(--navy);font-weight:800!important}
-.kicker{font-size:.72rem;font-weight:800;letter-spacing:.145em;color:#3567d8;text-transform:uppercase;margin-bottom:9px}
-.intro{color:#63758a;font-size:.95rem;margin:0 0 1.55rem;max-width:780px}
-.topline{display:flex;justify-content:space-between;align-items:center;margin:0 0 20px}
-.topline .workspace{font-size:.77rem;font-weight:800;color:#607991;letter-spacing:.13em;text-transform:uppercase}
-.topline .availability{background:#e7f7f1;color:#117e62;font-size:.73rem;font-weight:800;padding:7px 13px;border:1px solid #c7eddf;border-radius:90px}
-.brand{display:flex;align-items:center;gap:11px;margin:12px 0 6px}
-.brand-icon{width:42px;height:42px;background:linear-gradient(140deg,#2454bc,#3d7fe7);color:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:23px;box-shadow:0 5px 15px #2f61c122}
-.brand-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:1rem;color:#102743;font-weight:800;line-height:1.35}
-.brand-subtitle{font-size:.74rem;color:#8492a4;margin-top:4px}
-.nav-caption{font-size:.66rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8a99ab;margin:19px 0 9px}
-.sidebar-divider{height:1px;background:#e8edf4;margin:16px 0 10px}
-.sidebar-profile{display:flex;align-items:center;gap:10px;padding:12px;background:#f7f9fd;border:1px solid #e9eef5;border-radius:12px;margin:4px 0 6px}
-.profile-avatar{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:#dce8ff;color:#2357b7;font-weight:800;font-size:.86rem}
-.profile-name{color:#193859;font-size:.82rem;font-weight:800;overflow-wrap:anywhere}
-.profile-role{color:#7c8da1;font-size:.7rem;margin-top:2px}
-.logout-copy{font-size:.86rem;line-height:1.6;color:#64768a;margin:4px 0 14px}
-.logout-note{font-size:.81rem;line-height:1.6;color:#986a14;background:#fff8e6;padding:13px 14px;border:1px solid #f6e9bc;border-radius:10px;margin:0 0 18px}
-.hero{background:linear-gradient(111deg,#102947 0%,#183e71 58%,#2857a0 100%);border-radius:19px;padding:32px 36px 35px;display:flex;justify-content:space-between;align-items:center;gap:26px;overflow:hidden;position:relative;margin-bottom:23px;box-shadow:0 14px 34px #12335d15}
-.hero:after{content:'';position:absolute;right:-115px;top:-105px;width:380px;height:380px;border:1px solid #ffffff2e;border-radius:50%;box-shadow:0 0 0 55px #ffffff07,0 0 0 112px #ffffff05}
-.hero-main{position:relative;z-index:1;max-width:680px}
-.hero .eyebrow{font-size:.72rem;color:#c3dcff;letter-spacing:.16em;font-weight:800;margin-bottom:11px}
-.hero h1{font-size:2rem!important;line-height:1.25;color:#fff!important;margin:0 0 12px!important}
-.hero p{color:#d1e0f4;font-size:.92rem;margin:0;max-width:570px}
-.hero-right{z-index:1;flex-shrink:0;min-width:178px;border:1px solid #ffffff35;border-radius:14px;background:#ffffff13;padding:17px 20px}
-.hero-right .count{font-size:1.6rem;font-weight:800;line-height:1.2;color:#fff}
-.hero-right .tiny{font-size:.76rem;color:#d1e0f4}
-.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin:0 0 30px}
-.stat{background:#fff;border:1px solid #e1eaf4;border-radius:15px;padding:19px 20px 17px;box-shadow:0 6px 25px #1c4a7807;min-width:0}
-.stat-head{display:flex;align-items:center;justify-content:space-between;gap:7px}
-.stat-label{color:#687b91;font-size:.78rem;font-weight:600}
-.stat-icon{height:34px;width:34px;border-radius:10px;background:#eef3ff;color:#3265d4;display:flex;align-items:center;justify-content:center;font-size:19px}
-.stat-value{color:#112b4c;font-family:'Plus Jakarta Sans',sans-serif;font-size:2rem;letter-spacing:-.05em;font-weight:800;margin-top:11px;line-height:1.2}
-.stat-foot{color:#8494a6;font-size:.72rem;margin-top:7px}
-.section-heading{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.18rem;font-weight:800;color:#12304f;margin:2px 0 14px}
-.panel{background:white;border:1px solid #e2eaf3;border-radius:16px;padding:22px 23px;margin-bottom:17px;box-shadow:0 7px 28px #1a487305}
-.panel-title{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#14304c;font-size:1rem;margin:0 0 6px}
-.panel-desc{font-size:.77rem;color:#8190a2;margin-bottom:20px}
-.status-row{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #edf1f5;gap:10px}
-.status-row:last-child{border-bottom:none}
-.status-meta{display:flex;align-items:center;gap:10px;font-size:.83rem;font-weight:600;color:#405873}
-.dot{width:9px;height:9px;border-radius:99px;flex-shrink:0}
-.count-pill{background:#f0f4f9;color:#24415f;padding:5px 10px;font-weight:800;font-size:.8rem;border-radius:8px}
-.progress-track{height:9px;border-radius:99px;background:#e8eef7;overflow:hidden;margin-top:12px}
-.progress-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#2d65d6,#63a3f5)}
-.progress-caption{display:flex;justify-content:space-between;color:#7488a0;font-size:.76rem;margin-top:9px}
-.empty-box{background:#f8faff;border:1px dashed #cfdded;border-radius:13px;padding:23px;text-align:center;color:#73879b;font-size:.84rem;line-height:1.7;margin:5px 0}
-.step{display:flex;align-items:flex-start;gap:12px;padding:11px 0}
-.step-num{flex:0 0 28px;height:28px;border-radius:9px;background:#edf3ff;color:#3867cf;font-weight:800;font-size:.81rem;display:flex;align-items:center;justify-content:center}
-.step-body{font-size:.86rem;color:#31516e;line-height:1.4}
-.step-body small{display:block;color:#8998aa;margin-top:4px;font-size:.76rem}
-.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}
-.podium-item{background:#fff;border:1px solid #e3eaf2;border-radius:14px;padding:19px 17px;min-width:0}
-.podium-rank{font-size:.74rem;letter-spacing:.08em;font-weight:800;color:#5b7db4;margin-bottom:9px}
-.podium-name{font-family:'Plus Jakarta Sans',sans-serif;font-size:1rem;font-weight:800;color:#193553;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.podium-meta{font-size:.77rem;color:#8190a3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
-.podium-score{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.6rem;font-weight:800;color:#2f62d3;margin-top:13px}
-.podium-score span{font-size:.8rem;color:#8596ac}
-.login-shell{margin:46px auto 20px;padding:0 4px;text-align:center}
-.st-key-login_card [data-testid="stForm"]{padding:20px 23px 23px!important;border-radius:16px!important;box-shadow:0 13px 40px #1c476a12!important}
-.st-key-login_card [data-testid="stForm"] [data-testid="stVerticalBlock"]{gap:.68rem!important}
-.st-key-login_card [data-testid="stForm"] button{min-height:42px!important}
-.login-icon{width:52px;height:52px;display:flex;align-items:center;justify-content:center;background:linear-gradient(120deg,#2359c1,#5290ef);color:#fff;border-radius:14px;margin:0 auto 17px;font-size:24px;box-shadow:0 11px 23px #2f66ca24}
-.login-title{text-align:center;font-family:'Plus Jakarta Sans',sans-serif;font-size:1.48rem;font-weight:800;color:#12304d;margin-bottom:8px}
-.login-desc{text-align:center;color:#75869b;font-size:.84rem;line-height:1.6;margin:0 auto 20px;max-width:350px}
-.login-footer{text-align:center;color:#8494a7;font-size:.73rem;margin:17px 0}
-@media(max-width:1000px){.block-container{padding:1.7rem 1rem 2.5rem}.stats{grid-template-columns:repeat(2,1fr)}.hero{padding:23px;display:block}.hero-right{display:none}}
-@media(max-width:520px){.stats{grid-template-columns:1fr 1fr;gap:8px}.stat{padding:13px}.stat-value{font-size:1.5rem}.podium{grid-template-columns:1fr}.hero h1{font-size:1.55rem!important}}
+[data-testid="stPlotlyChart"] > div,
+[data-testid="stPlotlyChart"] .js-plotly-plot,
+[data-testid="stPlotlyChart"] .plot-container,
+[data-testid="stPlotlyChart"] .svg-container {
+  max-width:100% !important;
+}
+[data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+  max-width:100%;min-width:0;overflow:hidden;border-radius:12px;
+}
+[data-testid="stTabs"] {max-width:100%;min-width:0;}
+[data-testid="stTabs"] [data-baseweb="tab-panel"] {min-width:0;max-width:100%;padding-top:18px;}
+/* Replace an over-wide arrow chain with a five-column flow that truly fits. */
+.workflow-card {width:100%;max-width:100%;overflow:hidden;padding:23px 25px;margin:12px 0 22px;}
+.workflow-title {margin:0 0 17px;}
+.workflow-line {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:stretch;min-width:0;max-width:100%;}
+.workflow-step {position:relative;display:flex;align-items:center;justify-content:center;
+ text-align:center;padding:13px 10px;min-width:0;max-width:100%;width:100%;
+ font-size:.76rem;overflow-wrap:break-word;white-space:normal;border-radius:9px;line-height:1.4;}
+.workflow-step:not(:last-child)::after {content:'›';position:absolute;right:-10px;top:50%;transform:translateY(-50%);
+ font-size:21px;font-weight:800;color:#91A8CB;z-index:2;line-height:1;}
+.workflow-arrow {display:none;}
+@media(max-width:1150px) {
+ .workflow-line {grid-template-columns:repeat(3,minmax(0,1fr));}
+ .workflow-step::after {display:none;}
+}
+@media(max-width:700px) {
+ .block-container {padding:1.15rem 1.05rem 2rem;}
+ .hero {padding:21px 22px;}
+ [data-testid="stHorizontalBlock"] {gap:.9rem;}
+ /* Keep native container padding on mobile too. */
+ [data-testid="stMetric"] {padding:15px 17px;}
+ [data-testid="stForm"] {padding:18px;}
+ [data-testid="stPlotlyChart"] {padding:10px;}
+ .workflow-card {padding:18px;}
+ .workflow-line {grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+}
+@media(max-width:420px) {.workflow-line {grid-template-columns:1fr;}}
+
+
+/* V4 — Typography & accent polish; keep card sizes and page gutters unchanged. */
+.hero h1 {font-size:2.08rem;line-height:1.2;}
+.hero p {font-size:1rem;line-height:1.63;}
+.eyebrow,.section-kicker {font-size:11px;}
+.section-title {font-size:1.52rem;line-height:1.25;}
+.section-desc {font-size:.96rem;line-height:1.6;}
+.section-head {margin-top:20px;}
+.module-top {margin-bottom:15px;}
+.module-icon {width:44px;height:44px;font-size:22px;}
+.module-index {font-size:11px;}
+.module-title {font-size:1.24rem;line-height:1.3;margin-bottom:9px;}
+.module-desc {font-size:.97rem;line-height:1.58;color:#465A74;}
+.module-label {font-size:.84rem;}
+.module-study {font-size:.94rem;line-height:1.55;color:#465A74;}
+.module-outcome {margin:12px 0 11px;padding:15px 17px;}
+.module-outcome-label {font-size:10px;}
+.module-outcome-text {font-size:.96rem;line-height:1.5;}
+.module-foot {font-size:.84rem;color:#687B95;}
+.module-index {padding:6px 10px;border:1px solid #E1E9F4;border-radius:999px;background:#F7FAFF;}
+[data-testid="stMetricLabel"] p {font-size:.92rem !important;color:#4D607A !important;}
+[data-testid="stMetricValue"] {font-size:2.03rem;}
+[data-testid="stWidgetLabel"] p, [data-testid="stFileUploader"] label {font-size:.96rem !important;}
+[data-testid="stTabs"] [data-baseweb="tab"] {font-size:.94rem;}
+[data-testid="stDataFrame"] {font-size:.9rem;}
+.note {font-size:.95rem;line-height:1.65;}
+.workflow-title {font-size:1.08rem;}
+.workflow-step {font-size:.88rem;}
+/* A little depth from color, not extra frames. */
+.hero {background:linear-gradient(120deg,#FFFFFF 0%,#F3F7FF 78%,#EAF5FF 100%);}
+[data-testid="stMetric"] {background:linear-gradient(145deg,#FFFFFF 72%,#EFF5FF 100%);border-color:#DCE7F6;}
+[data-testid="stMetric"]:nth-of-type(even) {background:linear-gradient(145deg,#FFFFFF 70%,#F2EEFF 100%);}
+/* Preserve readable font sizing on medium screens. */
+@media(max-width:900px) {
+ .hero h1{font-size:1.75rem;}
+ .module-title{font-size:1.1rem;}
+ .module-desc,.module-study{font-size:.9rem;}
+ [class*="st-key-overview_"] button p{font-size:.82rem !important;}
+}
+
+
+/* V5 — Visual refresh: modern, spacious analytics UI.
+   Layout-only styles: no analytical logic, data loader, or module callbacks changed. */
+:root {
+ --page:#F5F7FC;--paper:#FFFFFF;--navy:#142342;--ink:#34445E;
+ --muted:#72809A;--line:#E2E9F3;--blue:#3563E9;--softblue:#EDF3FF;
+ --shadow:0 12px 32px rgba(25,50,99,.055);
+}
+html,body,[data-testid="stApp"],[data-testid="stAppViewContainer"] {
+ background:radial-gradient(circle at 80% 5%,#EEF3FF 0,transparent 34%),var(--page);
+}
+[data-testid="stHeader"]{background:rgba(245,247,252,.88);backdrop-filter:blur(12px);}
+.block-container{max-width:1270px;padding:2rem clamp(1.3rem,3.1vw,3rem) 3.7rem;}
+
+/* Sidebar navigation keeps real gutters between active menu and both edges. */
+[data-testid="stSidebar"] {
+ min-width:331px;max-width:331px;
+ background:#FCFDFF;border-right:1px solid #E0E7F4;
+ box-shadow:6px 0 26px rgba(17,36,75,.025);
+}
+[data-testid="stSidebar"] > div:first-child {background:#FCFDFF;}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:.30rem;}
+[data-testid="stSidebar"] [class*="st-key-nav_"]{
+ width:calc(100% - 18px)!important;margin-left:9px!important;
+ margin-right:9px!important;margin-bottom:3px!important;
+}
+[data-testid="stSidebar"] .stButton > button{
+ min-height:44px;border-radius:11px;padding:.64rem .85rem!important;
+ color:#536681;gap:.62rem;font-weight:570;font-size:.84rem;
+ transition:background .16s ease,border-color .16s ease,box-shadow .16s ease;
+}
+[data-testid="stSidebar"] .stButton > button p{
+ font-size:.82rem;letter-spacing:-.006em;line-height:1.38;
+}
+[data-testid="stSidebar"] .stButton > button:hover{
+ background:#EFF4FF;color:#2854CD;border-color:#E1EAFB;
+ box-shadow:0 3px 10px rgba(53,99,233,.055);
+}
+.side-brand{margin:6px 7px 1px;padding:12px 4px 16px;gap:13px;}
+.brand-icon{width:46px;height:46px;border-radius:15px;
+ background:linear-gradient(145deg,#DCE9FF 0%,#ECF4FF 100%);
+ box-shadow:inset 0 0 0 1px #D2E2FF;}
+.brand-title{font-size:15px;font-weight:790;letter-spacing:-.02em;color:#182B51;}
+.brand-caption{font-size:11px;color:#8291A9;}
+.side-rule{background:linear-gradient(90deg,#E6ECF5,#CFDDF2,#E6ECF5);margin:5px 8px 9px;}
+.side-section{color:#8B9BB5;font-size:10px;font-weight:800;
+ letter-spacing:.105em;margin:16px 0 7px 17px;}
+.side-footer{
+ margin:22px 9px 10px;padding:16px 12px 12px;
+ border-top:1px solid #E1E9F5;border-radius:0;color:#8291A6;
+}
+.side-footer strong{color:#253E67;}
+
+/* Editorial-style headers with a high-contrast visual focal point. */
+.hero{
+ position:relative;isolation:isolate;overflow:hidden;
+ background:linear-gradient(110deg,#132544 2%,#1A3767 55%,#2755A2 100%);
+ border:1px solid rgba(107,154,242,.24);border-radius:22px;
+ padding:34px 38px;box-shadow:0 18px 34px rgba(23,47,91,.16);
+ margin-bottom:23px;
+}
+.hero::after{content:'';position:absolute;z-index:-1;width:300px;height:300px;
+ border-radius:50%;right:-110px;top:-155px;background:rgba(109,157,255,.16);}
+.hero h1{color:#FFFFFF!important;font-size:2.13rem;line-height:1.16;margin-bottom:11px;}
+.hero p{color:#CAD8EF;font-size:1rem;max-width:760px;line-height:1.68;}
+.hero .eyebrow{color:#A9C6FF;font-size:11px;letter-spacing:.115em;margin-bottom:12px;}
+.hero-overview{padding:43px 44px 40px;min-height:300px;display:flex;align-items:center;
+ justify-content:space-between;gap:22px;background:linear-gradient(117deg,#101F3B 0%,#173365 55%,#2B58AE 100%);}
+.hero-overview::before{content:'';position:absolute;z-index:-1;inset:0;
+ background:radial-gradient(circle at 80% 60%,rgba(117,159,255,.19),transparent 35%);}
+.hero-overview-copy{position:relative;max-width:620px;z-index:2;}
+.hero-overview h1{font-size:clamp(2.25rem,3.55vw,3.1rem);line-height:1.1;
+ letter-spacing:-.045em;max-width:550px;margin:14px 0;}
+.hero-overview h1 span{color:#A6C4FF;}
+.hero-overview p{font-size:.99rem;max-width:570px;line-height:1.67;margin:0;}
+.hero-pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;
+ padding:7px 12px;background:rgba(153,188,255,.12);border:1px solid rgba(189,211,255,.24);
+ color:#DAE8FF;font-weight:730;font-size:.69rem;letter-spacing:.08em;}
+.hero-dot{width:6px;height:6px;background:#72E8C3;border-radius:50%;box-shadow:0 0 0 4px rgba(114,232,195,.12);}
+.hero-overview-foot{margin-top:21px;display:flex;gap:10px;flex-wrap:wrap;}
+.hero-overview-foot span{font-size:.76rem;color:#DFE9FB;border:1px solid rgba(180,206,255,.18);
+ padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.045);}
+.hero-illustration{width:270px;height:235px;flex:none;position:relative;display:flex;align-items:center;justify-content:center;}
+.hero-orbit{width:218px;height:218px;border:1px solid rgba(167,196,255,.24);
+ border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;}
+.hero-orbit::before{content:'';position:absolute;inset:22px;border:1px dashed rgba(194,215,255,.26);border-radius:50%;}
+.hero-orbit::after{content:'';position:absolute;inset:46px;border:1px solid rgba(210,226,255,.17);border-radius:50%;}
+.hero-core{height:91px;width:91px;border-radius:25px;
+ background:linear-gradient(148deg,#7D9FFF,#4B75E6);display:flex;align-items:center;justify-content:center;
+ box-shadow:0 12px 30px rgba(11,27,71,.25),inset 0 1px 0 rgba(255,255,255,.37);z-index:1;}
+.hero-satellite{position:absolute;width:39px;height:39px;border-radius:12px;
+ display:flex;align-items:center;justify-content:center;color:white;
+ border:1px solid rgba(219,233,255,.22);box-shadow:0 9px 18px rgba(9,29,65,.21);}
+.hero-satellite.s1{top:12px;left:28px;background:#436FE6;}
+.hero-satellite.s2{right:1px;top:75px;background:#20A7AB;}
+.hero-satellite.s3{bottom:15px;left:34px;background:#7C60D4;}
+.hero-satellite svg,.hero-core svg{display:block;}
+
+/* Clear information hierarchy and less generic native card styling. */
+.section-head{margin:27px 0 14px;}
+.section-kicker{font-size:11px;color:#4168C8;font-weight:800;letter-spacing:.09em;}
+.section-title{font-size:1.65rem;color:#182B51;font-weight:790;letter-spacing:-.03em;}
+.section-desc{color:#6D7F98;font-size:.96rem;max-width:820px;}
+[data-testid="stMetric"]{
+ background:#FFF;border:1px solid #E0E8F4;border-radius:16px;
+ box-shadow:0 7px 22px rgba(27,53,99,.045);padding:22px 25px;min-height:115px;
+}
+[data-testid="stMetric"]:nth-of-type(even){background:#FFF;}
+[data-testid="stMetricLabel"] p{font-size:.9rem!important;color:#71819B!important;}
+[data-testid="stMetricValue"]{font-size:2.12rem;color:#1D355E;}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.module-top){
+ border-radius:19px;box-shadow:0 10px 27px rgba(24,49,102,.065);
+ background:#FFF;transition:box-shadow .16s ease,transform .16s ease;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.module-top):hover{
+ box-shadow:0 16px 35px rgba(24,49,102,.105);transform:translateY(-2px);
+}
+.module-top{margin-bottom:16px;}
+.module-icon{width:49px;height:49px;border-radius:14px;font-size:23px;}
+.module-index{font-size:10px;background:#F6F8FC;border-color:#E6EDF7;color:#7D8FA9;}
+.module-title{font-size:1.3rem;font-weight:790;letter-spacing:-.025em;margin:0 0 9px;}
+.module-desc{font-size:.96rem;line-height:1.66;color:#63738B;margin-bottom:18px;min-height:5rem;}
+.module-divider{background:#E9EFF7;margin:15px 0;}
+.module-label{color:#334969;font-size:.83rem;}
+.module-study{font-size:.92rem;color:#566B88;line-height:1.57;margin:5px 0 15px;}
+.module-outcome{border-radius:13px;margin:10px 0 13px;padding:15px 18px;}
+.module-outcome-label{font-size:.64rem;letter-spacing:.08em;}
+.module-outcome-text{font-size:.93rem;}
+.module-foot{font-size:.77rem;color:#7D8DA7;}
+[class*="st-key-overview_"] button{
+ min-height:41px;border-radius:10px;font-weight:730;
+ transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease;
+}
+[class*="st-key-overview_"] button:hover{transform:translateY(-1px);box-shadow:0 7px 14px rgba(42,77,138,.08);}
+.workflow-card{border-radius:18px;padding:24px 27px;box-shadow:0 8px 22px rgba(27,53,99,.05);}
+.workflow-step{border-radius:11px;background:#F1F5FD;border-color:#DBE5F6;color:#37558D;}
+[data-testid="stForm"]{border-radius:17px;box-shadow:0 7px 20px rgba(26,49,91,.045);}
+[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
+ background:#E8EFFF;color:#2655CE;border:1px solid #C7D9FD;
+}
+[data-testid="stPlotlyChart"]{border-radius:15px;}
+@media(max-width:1100px){
+ .hero-overview{padding:32px 32px;min-height:250px;}
+ .hero-illustration{width:190px;height:190px;transform:scale(.78);transform-origin:center;}
+}
+@media(max-width:750px){
+ [data-testid="stSidebar"]{min-width:292px;max-width:315px;}
+ .block-container{padding:1.2rem 1.05rem 2.2rem;}
+ .hero,.hero-overview{padding:27px 24px;border-radius:17px;}
+ .hero-overview{min-height:unset;}
+ .hero-overview h1{font-size:2.18rem;}
+ .hero-illustration{display:none;}
+ .hero h1{font-size:1.79rem;}
+ .section-title{font-size:1.36rem;}
+}
+
+
+/* Overview only: one consistent inset for metrics, sections, cards and dataset.
+   IMPORTANT: use a plain container, not an extra st.columns wrapper. */
+.st-key-overview_content {
+  width: calc(100% - 48px);
+  max-width: calc(100% - 48px);
+  margin-left: auto;
+  margin-right: auto;
+  min-width: 0;
+  padding-top: 24px !important;
+}
+@media (max-width: 750px) {
+  .st-key-overview_content {
+    width: calc(100% - 24px);
+    max-width: calc(100% - 24px);
+  }
+}
+
+
+
+
+/* Overview V6: Learning Journey */
+.journey-shell {
+  background: linear-gradient(126deg,#FFFFFF 0%,#FBFCFF 52%,#F2F6FF 100%);
+  border: 1px solid #DBE5F4;
+  border-radius: 22px;
+  padding: 27px 28px 22px;
+  box-shadow: 0 9px 25px rgba(27,57,111,.06);
+  overflow: hidden;
+  box-sizing: border-box !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 15px 48px 30px 0 !important;
+
+}
+.journey-head {display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
+.journey-heading {font-size:1.12rem;font-weight:800;color:#1B3157;letter-spacing:-.025em;}
+.journey-subheading {color:#74859F;font-size:.85rem;margin-top:4px;}
+.journey-pill {font-size:.68rem;letter-spacing:.085em;font-weight:800;color:#3363D3;
+  padding:7px 11px;background:#EDF3FF;border:1px solid #DCE7FB;border-radius:999px;}
+.journey-grid {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;position:relative;}
+.journey-grid::before {content:'';position:absolute;z-index:0;left:10%;right:10%;top:36px;height:3px;
+  background:linear-gradient(90deg,#3971EF 0%,#8367EA 30%,#00A8A3 66%,#0EAE83 100%);
+  border-radius:4px;opacity:.33;}
+.journey-step {min-width:0;position:relative;z-index:1;text-align:center;padding:0 5px;
+  transition:transform .18s ease;}
+.journey-step:hover {transform:translateY(-4px);}
+.journey-step:nth-child(1){--step-a:#2563EB;--step-b:#5E8AFF;}
+.journey-step:nth-child(2){--step-a:#6D4BD9;--step-b:#9B79F1;}
+.journey-step:nth-child(3){--step-a:#0D93B8;--step-b:#49C0D4;}
+.journey-step:nth-child(4){--step-a:#0F9A86;--step-b:#4BCDB2;}
+.journey-step:nth-child(5){--step-a:#E7863A;--step-b:#F6B060;}
+.journey-node {display:flex;align-items:center;justify-content:center;margin:0 auto 14px;
+  width:74px;height:74px;border-radius:22px;color:white;position:relative;
+  border:5px solid #FFFFFF;background:linear-gradient(145deg,var(--step-a),var(--step-b));
+  box-shadow:0 8px 22px rgba(25,66,123,.18);}
+.journey-node svg {width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;}
+.journey-num {color:var(--step-a);font-size:.66rem;font-weight:850;letter-spacing:.12em;margin-bottom:7px;}
+.journey-name {font-weight:790;color:#1B3157;font-size:.91rem;line-height:1.35;margin-bottom:7px;}
+.journey-description {font-size:.77rem;line-height:1.5;color:#6D809B;max-width:195px;margin:0 auto;}
+.journey-footer {display:flex;align-items:center;gap:9px;margin-top:23px;padding-top:17px;
+  border-top:1px dashed #DFE7F4;color:#647894;font-size:.8rem;line-height:1.5;}
+.journey-footer-dot {height:8px;width:8px;flex:none;border-radius:100%;background:#34B39D;
+  box-shadow:0 0 0 4px #DDF8F1;}
+@media (max-width:850px) {
+  .journey-shell{padding:22px 20px;}
+  .journey-head{margin-bottom:22px;}
+  .journey-grid {display:flex;flex-direction:column;gap:18px;}
+  .journey-grid::before {top:29px;bottom:29px;left:28px;right:auto;width:3px;height:auto;}
+  .journey-step {display:flex;align-items:center;gap:14px;padding:0;text-align:left;}
+  .journey-node {flex:none;width:58px;height:58px;margin:0;border-radius:18px;border-width:4px;}
+  .journey-node svg {width:22px;height:22px;}
+  .journey-name {margin-bottom:3px;}
+  .journey-num {margin-bottom:4px;}
+  .journey-description {max-width:none;margin:0;}
+  .journey-footer {margin-top:20px;}
+}
+
+
+/* Penanda interaktif: judul expander harus mudah dikenali sebagai area yang bisa diklik. */
+[data-testid="stExpander"] details > summary {
+  background:#EAF2FF !important;
+  border:1px solid #BBD1FB !important;
+  border-radius:11px !important;
+  padding:12px 15px !important;
+  color:#1D4ED8 !important;
+  cursor:pointer !important;
+  transition:background .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+[data-testid="stExpander"] details > summary:hover {
+  background:#DAE9FF !important;
+  border-color:#8EB4FC !important;
+  box-shadow:0 3px 10px rgba(37,99,235,.08);
+}
+[data-testid="stExpander"] details > summary:focus-visible {
+  outline:3px solid rgba(37,99,235,.30);
+  outline-offset:2px;
+}
+[data-testid="stExpander"] details > summary p,
+[data-testid="stExpander"] details > summary [data-testid="stMarkdownContainer"] p {
+  color:#1D4ED8 !important;
+  font-size:.98rem !important;
+  font-weight:800 !important;
+  line-height:1.5 !important;
+}
+[data-testid="stExpander"] details > summary svg {
+  color:#1D4ED8 !important;
+  stroke:#1D4ED8 !important;
+}
+[data-testid="stExpander"] details[open] > summary {
+  background:#E3EEFF !important;
+  border-color:#93B9FF !important;
+}
+
 </style>
-""", unsafe_allow_html=True)
+''', unsafe_allow_html=True)
 
+NAV = [
+    "Overview",
+    "Apriori Analysis",
+    "Market Basket Analysis",
+    "Content-Based Recommendation",
+    "Movie Recommendation",
+    "User-Based Collaborative Filtering",
+    "Item-Based Collaborative Filtering",
+    "Hybrid Recommendation",
+]
+NAV_KEYS = ["overview", "apriori", "market", "content", "movie", "user", "item", "hybrid"]
+NAV_ICONS = [
+    ":material/dashboard:", ":material/shopping_cart:",
+    ":material/shopping_basket:", ":material/description:",
+    ":material/movie:", ":material/groups:",
+    ":material/menu_book:", ":material/call_merge:",
+]
+NAV_GROUPS = [
+    ("WORKSPACE", [0]),
+    ("01 / ASSOCIATION RULES", [1, 2]),
+    ("02 / CONTENT-BASED FILTERING", [3, 4]),
+    ("03 / COLLABORATIVE FILTERING", [5, 6]),
+    ("04 / HYBRID SYSTEM", [7]),
+]
 
-def secret(name: str) -> str:
-    try:
-        return str(st.secrets.get(name, "")).strip()
-    except Exception:  # No secrets file, unavailable secrets, or platform configuration issue.
-        return ""
+def select_nav(index):
+    st.session_state["active_page"] = NAV[int(index)]
 
-
-APP_USERNAME = secret("APP_USERNAME")
-APP_PASSWORD = secret("APP_PASSWORD")
-
-# Fail closed: no candidate/profile screen may render until credentials are configured.
-if not APP_USERNAME or not APP_PASSWORD:
-    st.markdown('<div class="login-shell"><div class="login-icon">🔐</div><div class="login-title">Akses belum dikonfigurasi</div><div class="login-desc">Atur APP_USERNAME dan APP_PASSWORD di Streamlit Cloud → Settings → Secrets. Data kandidat tidak ditampilkan sebelum akses aktif.</div></div>', unsafe_allow_html=True)
-    st.code('APP_USERNAME = "nama_akun_pewawancara"\nAPP_PASSWORD = "password_kuat_dan_unik"', language="toml")
-    st.stop()
-
-credential_revision = hashlib.sha256(f"{APP_USERNAME}\0{APP_PASSWORD}".encode()).hexdigest()
-if st.session_state.get("authenticated_revision") != credential_revision:
-    st.session_state["authenticated"] = False
-
-if not st.session_state.get("authenticated", False):
-    # Center both the heading AND the actual Streamlit form, not just the HTML header.
-    # The middle column stays approximately 420-490px on a desktop screen.
-    _, login_column, _ = st.columns([1.05, 1.10, 1.05], gap="small")
-    with login_column:
-        st.markdown('<div class="login-shell"><div class="login-icon">🔐</div><div class="login-title">Selamat datang kembali</div><div class="login-desc">Masuk untuk mengelola kandidat, melakukan wawancara, dan melihat hasil seleksi.</div></div>', unsafe_allow_html=True)
-        if st.session_state.get("failed_logins", 0) >= 5:
-            st.error("Terlalu banyak percobaan pada sesi ini. Tutup sesi browser dan coba kembali. Untuk proteksi lebih kuat, gunakan autentikasi akun organisasi (SSO/OIDC).")
-            st.stop()
-        with st.container(key="login_card"):
-            with st.form("login_form", clear_on_submit=False):
-                username = st.text_input("Username", placeholder="Masukkan username", autocomplete="username")
-                password = st.text_input("Password", type="password", placeholder="Masukkan password", autocomplete="current-password")
-                login_submit = st.form_submit_button("Masuk ke Sistem", type="primary", use_container_width=True)
-        if login_submit:
-            if hmac.compare_digest(username, APP_USERNAME) and hmac.compare_digest(password, APP_PASSWORD):
-                st.session_state["authenticated"] = True
-                st.session_state["authenticated_revision"] = credential_revision
-                st.session_state["failed_logins"] = 0
-                st.rerun()
-            else:
-                st.session_state["failed_logins"] = st.session_state.get("failed_logins", 0) + 1
-                st.error("Username atau password tidak sesuai.")
-        st.markdown('<div class="login-footer">INTERNAL RECRUITMENT PORTAL · AKSES TERBATAS</div>', unsafe_allow_html=True)
-    st.stop()
-
-# Fail closed: never use ephemeral session data as a silent database fallback.
-if not configured():
-    st.error("Koneksi PostgreSQL belum dikonfigurasi. Isi DATABASE_URL melalui Streamlit Cloud → Settings → Secrets.")
-    st.stop()
-try:
-    db_candidates, db_interviews = load_records()
-except DatabaseOperationError as exc:
-    st.error(str(exc))
-    st.stop()
-st.session_state["candidates"] = db_candidates
-st.session_state["interviews"] = db_interviews
-if "page" not in st.session_state:
-    st.session_state["page"] = "Mulai di Sini"
-
-@st.cache_data(show_spinner=False)
-def rubric():
-    return get_rubric_and_questions()
-
-weights, high, mid, questions, scale = rubric()
-C = st.session_state["candidates"]
-I = st.session_state["interviews"]
-ranked = ranking_rows(C, I, weights, high, mid)
-
-
-def section(kicker: str, title: str, description: str):
-    st.markdown(f'<div class="kicker">{html.escape(kicker)}</div>', unsafe_allow_html=True)
-    st.title(title)
-    st.markdown(f'<div class="intro">{html.escape(description)}</div>', unsafe_allow_html=True)
-
-
-def metric_card(label: str, value: str, note: str, icon: str):
-    st.markdown(f"""<div class="stat"><div class="stat-head"><div class="stat-label">{html.escape(label)}</div><div class="stat-icon">{icon}</div></div><div class="stat-value">{html.escape(str(value))}</div><div class="stat-foot">{html.escape(note)}</div></div>""", unsafe_allow_html=True)
-
-
-def blank_state(message: str):
-    st.markdown(f'<div class="empty-box">{html.escape(message)}</div>', unsafe_allow_html=True)
-
-
-def status_row(label: str, count: int, color: str):
-    st.markdown(f'<div class="status-row"><div class="status-meta"><span class="dot" style="background:{color}"></span>{html.escape(label)}</div><span class="count-pill">{count}</span></div>', unsafe_allow_html=True)
-
-
-def panel_head(title: str, subtitle: str):
-    st.markdown(f'<div class="panel-title">{html.escape(title)}</div><div class="panel-desc">{html.escape(subtitle)}</div>', unsafe_allow_html=True)
-
-
-def _date(text):
-    if isinstance(text, date):
-        return text
-    if not text:
-        return None
-    try:
-        return date.fromisoformat(str(text)[:10])
-    except (TypeError, ValueError):
-        return None
-
-
-def _int(text, fallback=0):
-    try:
-        return int(float(text))
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _float(text, fallback=0.0):
-    try:
-        return float(text)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _select(label: str, value: str, options: list[str]):
-    choices = options.copy()
-    if value and value not in choices:
-        choices.append(value)
-    return st.selectbox(label, choices, index=choices.index(value) if value in choices else 0)
-
-
-def _shortlist_table(records: list[dict]):
-    st.dataframe(records, use_container_width=True, hide_index=True)
-
-
-def _safe_excel_text(value) -> str:
-    """Write untrusted candidate input as text, never as an Excel formula."""
-    clean = "" if value is None else str(value)
-    return "'" + clean if clean.lstrip().startswith(("=", "+", "-", "@")) else clean
-
-
-def _candidate_invitation_xlsx(rows: list[dict]) -> bytes:
-    """Produce a compact, invitation-ready Excel file, separate from the full backup."""
-    from io import BytesIO
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.utils import get_column_letter
-
-    columns = [
-        ("ID", 13), ("Nama", 30), ("Email", 36), ("No. HP / WA", 20),
-        ("IPK", 11), ("Perguruan Tinggi", 34), ("Program Studi", 27),
-        ("Jenjang", 13), ("Semester", 13), ("Posisi Magang", 28),
-        ("Kota / Kabupaten", 23), ("Batch", 24), ("Status Interview", 24),
-    ]
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Undangan Interview"
-    sheet.sheet_view.showGridLines = False
-    sheet.freeze_panes = "C2"
-    sheet.row_dimensions[1].height = 28
-    header_fill = PatternFill(fill_type="solid", fgColor="173B70")
-    stripe_fill = PatternFill(fill_type="solid", fgColor="F2F6FC")
-    missing_fill = PatternFill(fill_type="solid", fgColor="FFF0F0")
-    for col, (header, width) in enumerate(columns, start=1):
-        cell = sheet.cell(row=1, column=col, value=header)
-        cell.fill = header_fill
-        cell.font = Font(name="Calibri", size=11, color="FFFFFF", bold=True)
-        cell.alignment = Alignment(vertical="center", wrap_text=True)
-        sheet.column_dimensions[get_column_letter(col)].width = width
-    for row_no, record in enumerate(rows, start=2):
-        sheet.row_dimensions[row_no].height = 22
-        for col, (name, _) in enumerate(columns, start=1):
-            value = record.get(name)
-            value = float(value) if name == "IPK" and value is not None else _safe_excel_text(value)
-            cell = sheet.cell(row=row_no, column=col, value=value)
-            cell.font = Font(name="Calibri", size=10, color="233950")
-            cell.alignment = Alignment(vertical="center")
-            if row_no % 2 == 0:
-                cell.fill = stripe_fill
-            if name == "IPK":
-                cell.number_format = "0.00"
-            if name == "Email" and not str(record.get("Email") or "").strip():
-                cell.fill = missing_fill
-    sheet.auto_filter.ref = f"A1:M{max(1, len(rows) + 1)}"
-    out = BytesIO()
-    workbook.save(out)
-    return out.getvalue()
-
-
-@st.dialog("Konfirmasi keluar", width="small")
-def show_logout_dialog():
-    st.markdown('<p class="logout-copy">Anda akan keluar dari sistem Interview Peserta Magang.</p><div class="logout-note">Data kandidat dan hasil interview yang sudah disimpan tetap tersedia di PostgreSQL.</div>', unsafe_allow_html=True)
-    cancel, confirm = st.columns(2, gap="small")
-    with cancel:
-        if st.button("Batal", key="cancel_logout", use_container_width=True):
-            st.rerun()
-    with confirm:
-        if st.button("Ya, keluar", key="confirm_logout", type="primary", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
-
-
-@st.dialog("Hapus data kandidat", width="small")
-def show_delete_candidate_dialog(candidate_id: str, candidate_name: str):
-    st.warning(
-        f"Anda akan **menghapus permanen** data **{candidate_name} ({candidate_id})**, "
-        "termasuk seluruh nilai dan catatan interview-nya. "
-        "Kandidat tersebut juga akan hilang dari dashboard dan ranking."
-    )
-    st.caption(
-        "Tindakan ini tidak dapat dibatalkan. Jika diperlukan, "
-        "unduh backup Excel sebelum menghapus."
-    )
-    confirmation = f"HAPUS {candidate_id}"
-    typed = st.text_input(
-        f"Untuk konfirmasi, ketik **{confirmation}**",
-        placeholder=confirmation,
-        key=f"delete_confirm_text_{candidate_id}",
-    )
-    cancel, confirm = st.columns(2, gap="small")
-    with cancel:
-        if st.button("Batal", key=f"cancel_delete_{candidate_id}", use_container_width=True):
-            st.rerun()
-    with confirm:
-        if st.button(
-            "Hapus permanen",
-            type="primary",
-            disabled=typed.strip() != confirmation,
-            key=f"confirm_delete_{candidate_id}",
-            use_container_width=True,
-        ):
-            try:
-                delete_candidate(candidate_id, expected_name=candidate_name)
-            except DatabaseOperationError as exc:
-                st.error(str(exc))
-            else:
-                st.session_state["candidate_deleted_notice"] = (
-                    f"Kandidat {candidate_name} ({candidate_id}) dan data interview-nya "
-                    "berhasil dihapus dari PostgreSQL."
-                )
-                st.session_state["candidate_pending_selection"] = "➕ Tambah Kandidat Baru"
-                st.rerun()
-
-
-@st.dialog("Detail Lengkap Kandidat", width="large")
-def show_candidate_detail_dialog(candidate_id: str):
-    """Read-only candidate profile, including every field in the entry form."""
-    person = C.get(candidate_id)
-    if not person:
-        st.warning("Data kandidat tidak ditemukan. Muat ulang halaman dan coba kembali.")
-        return
-
-    st.markdown(f"### {html.escape(str(person.get('nama') or 'Tanpa Nama'))}")
-    st.caption(f"ID Kandidat: {candidate_id} · Informasi ditampilkan dari PostgreSQL (hanya baca).")
-
-    def show_detail_field(label: str, value):
-        content = "—" if value is None or not str(value).strip() else str(value)
-        st.markdown(
-            '<div style="padding:10px 13px;margin:2px 0 8px;'
-            'background:#f8faff;border:1px solid #e6edf5;border-radius:10px;min-height:58px">'
-            f'<div style="color:#72839a;font-size:.73rem;font-weight:700;margin-bottom:4px">{html.escape(label)}</div>'
-            f'<div style="color:#193553;font-size:.88rem;white-space:pre-wrap;overflow-wrap:anywhere">{html.escape(content)}</div>'
-            '</div>', unsafe_allow_html=True,
-        )
-
-    sections = [
-        ("01 · Identitas & Kontak", [
-            ("Nama Lengkap", person.get("nama")),
-            ("Email", person.get("email")),
-            ("No. HP / WA", person.get("telepon")),
-            ("Kota / Kabupaten", person.get("kota")),
-            ("Alamat Domisili", person.get("alamat")),
-        ]),
-        ("02 · Pendidikan", [
-            ("Asal Perguruan Tinggi", person.get("kampus")),
-            ("Program Studi / Jurusan", person.get("prodi")),
-            ("Jenjang", person.get("jenjang")),
-            ("IPK", f"{_float(person.get('ipk')):.2f}"),
-            ("Semester", person.get("semester")),
-            ("Status Perkuliahan", person.get("status_kuliah")),
-        ]),
-        ("03 · Pengalaman & Kompetensi", [
-            ("Pengalaman Magang / Kerja", person.get("pengalaman_kerja")),
-            ("Pengalaman Organisasi", person.get("pengalaman_organisasi")),
-            ("Proyek / Portofolio", person.get("portofolio")),
-            ("Keahlian Utama", person.get("keahlian")),
-            ("Tools / Software", person.get("tools")),
-            ("Sertifikasi / Pelatihan", person.get("sertifikasi")),
-            ("Tautan LinkedIn / Portofolio", person.get("link")),
-        ]),
-        ("04 · Preferensi Magang & Berkas", [
-            ("Posisi / Bidang Magang", person.get("bidang")),
-            ("Bersedia WFO", person.get("wfo")),
-            ("Durasi Magang (bulan)", person.get("durasi")),
-            ("Dapat Mulai Tanggal", person.get("mulai")),
-            ("Status CV / Berkas", person.get("status_cv")),
-            ("Motivasi / Harapan Magang", person.get("motivasi")),
-        ]),
-    ]
-    for heading, fields in sections:
-        st.markdown(f"#### {heading}")
-        for n in range(0, len(fields), 2):
-            pair = st.columns(2, gap="small")
-            for col, (label, value) in zip(pair, fields[n:n + 2]):
-                with col:
-                    show_detail_field(label, value)
-
-    st.markdown("#### 05 · Informasi Interview")
-    interview = I.get(candidate_id)
-    if not interview:
-        st.info("Belum ada hasil interview yang tersimpan untuk kandidat ini.")
-    else:
-        final_score, recommendation = calculate(interview, weights, high, mid)
-        batch_code = interview.get("batch")
-        interview_fields = [
-            ("Tanggal Interview", interview.get("tanggal")),
-            ("Batch Rekrutmen", batch_label(batch_code) if batch_code else "Belum ditentukan"),
-            ("Pewawancara", interview.get("pewawancara")),
-            ("Skor Akhir", f"{final_score:.1f} / 100" if final_score is not None else "Belum lengkap"),
-            ("Rekomendasi Sistem", recommendation if final_score is not None else "Belum dinilai lengkap"),
-            ("Keputusan Akhir", interview.get("keputusan")),
-        ]
-        interview_fields.extend((label, f"{interview.get(key, 0)} / 5" if interview.get(key) else "Belum dinilai")
-                                for key, label, _ in ASPEK)
-        interview_fields.extend([
-            ("Kelebihan / Kekuatan", interview.get("kelebihan")),
-            ("Hal yang Perlu Ditingkatkan", interview.get("peningkatan")),
-            ("Catatan / Tindak Lanjut", interview.get("catatan")),
-        ])
-        for n in range(0, len(interview_fields), 2):
-            pair = st.columns(2, gap="small")
-            for col, (label, value) in zip(pair, interview_fields[n:n + 2]):
-                with col:
-                    show_detail_field(label, value)
-    st.caption("Jendela ini hanya menampilkan data; tidak menyimpan atau mengubah informasi kandidat.")
-
+if st.session_state.get("active_page") not in NAV:
+    st.session_state["active_page"] = NAV[0]
 
 with st.sidebar:
-    st.markdown('<div class="brand"><div class="brand-icon">◈</div><div><div class="brand-title">Internship Hub</div><div class="brand-subtitle">Recruitment & Assessment</div></div></div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-divider"></div><div class="nav-caption">MENU UTAMA</div>', unsafe_allow_html=True)
-    nav_items = [
-        ("Mulai di Sini", "Dashboard", ":material/dashboard:", "nav_dashboard"),
-        ("Data Kandidat", "Data Kandidat", ":material/groups:", "nav_candidates"),
-        ("Penilaian Interview", "Penilaian Interview", ":material/assignment_turned_in:", "nav_interview"),
-        ("Summary & Ranking", "Summary & Ranking", ":material/leaderboard:", "nav_ranking"),
-        ("Panduan & Rubrik", "Panduan & Rubrik", ":material/menu_book:", "nav_guide"),
-    ]
-    with st.container(key="main_navigation"):
-        for page_name, display_name, page_icon, widget_key in nav_items:
-            is_active = st.session_state.get("page") == page_name
-            if st.button(display_name, key=widget_key, icon=page_icon,
-                         use_container_width=True, type="primary" if is_active else "secondary"):
-                st.session_state["page"] = page_name
-                st.rerun()
-    menu = st.session_state["page"]
-
-    st.markdown('<div class="sidebar-divider"></div><div class="nav-caption">PENGELOLAAN DATA</div>', unsafe_allow_html=True)
-    with st.expander("Backup & Impor Excel", expanded=False, icon=":material/folder_open:"):
-        uploaded = st.file_uploader("Pilih file backup Excel", type=["xlsx"], help="Impor menggabungkan data berdasarkan ID. ID yang sudah ada akan diperbarui, data lain tetap disimpan.")
-        if uploaded is not None:
-            st.caption("Impor akan menambahkan kandidat baru dan memperbarui ID yang sama. Data lain tidak dihapus.")
-            confirm_import = st.checkbox("Saya memahami bahwa data dengan ID sama akan diperbarui", key="db_confirm_import")
-            if st.button("Impor ke PostgreSQL", use_container_width=True, disabled=not confirm_import):
-                try:
-                    new_c, new_i = read_xlsx(uploaded.getvalue())
-                    import_backup(new_c, new_i)
-                    st.success(f"{len(new_c)} kandidat dan {len(new_i)} hasil interview berhasil diimpor ke PostgreSQL.")
-                    st.rerun()
-                except (ValueError, DatabaseOperationError) as exc:
-                    st.error(f"Impor gagal: {exc}")
-        try:
-            excel_bytes = export_xlsx(C, I)
-            st.download_button(
-                "Download Backup Excel",
-                data=excel_bytes,
-                file_name=f"Hasil_Interview_Magang_{date.today().isoformat()}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                icon=":material/download:",
+    st.markdown('''
+    <div class="side-brand">
+      <div class="brand-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="5" y="5" width="18" height="18" rx="6" stroke="#2563EB" stroke-width="1.8"/>
+          <circle cx="10" cy="11" r="2" fill="#2563EB"/>
+          <circle cx="18" cy="10" r="2" fill="#2563EB"/>
+          <circle cx="16" cy="18" r="2" fill="#2563EB"/>
+          <path d="M11.8 11L16.2 10.2M11.3 12.7L15 16.4M17.9 12L16.6 16" stroke="#2563EB" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div><div class="brand-title">Big Data Analytics</div>
+      <div class="brand-caption">Created by Kelompok 2</div></div>
+    </div><div class="side-rule"></div>''', unsafe_allow_html=True)
+    for group_label, positions in NAV_GROUPS:
+        st.markdown(f'<div class="side-section">{group_label}</div>', unsafe_allow_html=True)
+        for i in positions:
+            st.button(
+                NAV[i], key="nav_" + NAV_KEYS[i],
+                icon=NAV_ICONS[i], use_container_width=True,
+                on_click=select_nav, args=(i,),
             )
-        except ValueError as exc:
-            st.error(str(exc))
-        st.caption("Data tersimpan di PostgreSQL. Download Excel sebagai backup berkala.")
+    st.markdown('''<div class="side-footer">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m2 10 10-5 10 5-10 5z"/><path d="M6 12v5c3.6 2.6 8.4 2.6 12 0v-5"/><path d="M22 10v6"/>
+      </svg>
+      <div><strong>MMT ITS</strong><div>Academic Dashboard · 2026</div></div>
+    </div>''', unsafe_allow_html=True)
+    # Tandai item aktif tanpa menggunakan radio button atau navigasi JavaScript.
+    selected_key = NAV_KEYS[NAV.index(st.session_state["active_page"])]
+    st.markdown(f'''<style>
+    [data-testid="stSidebar"] .st-key-nav_{selected_key} button {{
+        background:linear-gradient(105deg,#E5EEFF,#F0F5FF) !important;
+        color:#2353CC !important;border:1px solid #CCDDFD !important;
+        font-weight:750 !important;
+        box-shadow:inset 3px 0 0 #3563E9,0 5px 12px rgba(34,83,181,.08);
+    }}
+    [data-testid="stSidebar"] .st-key-nav_{selected_key} button p {{color:#1D4ED8 !important;font-weight:700 !important;}}
+    </style>''', unsafe_allow_html=True)
 
-    st.markdown('<div class="sidebar-divider"></div><div class="nav-caption">AKUN PEWAWANCARA</div>', unsafe_allow_html=True)
+page = st.session_state["active_page"]
+
+
+def hero(tag, title, detail):
+    st.markdown(f'<div class="hero"><div class="eyebrow">{tag}</div>'
+                f'<h1>{title}</h1><p>{detail}</p></div>', unsafe_allow_html=True)
+
+
+def note(message):
+    st.markdown(f'<div class="note">{message}</div>', unsafe_allow_html=True)
+
+
+def metrics(entries):
+    cols = st.columns(len(entries))
+    for col, (label, value) in zip(cols, entries):
+        col.metric(label, value)
+
+
+def show_table(df, filename="hasil_analisis.csv", height=320):
+    compact_dataframe(df, height=height, hide_index=True)
+    st.download_button("Unduh hasil CSV", df.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=filename, mime="text/csv", icon=":material/download:")
+
+
+def compact_dataframe(df, height=None, **kwargs):
+    """Show results without reserving hundreds of empty pixels for small datasets."""
+    try:
+        rows = len(df)
+    except (ValueError, TypeError):
+        rows = 10
+    ideal = max(115, min(400, 39 * (min(rows, 10) + 1)))
+    actual = min(ideal, height) if height else ideal
+    kwargs.setdefault("use_container_width", True)
+    st.dataframe(df, height=actual, **kwargs)
+
+
+def choose_explanation_row(frame, label_col, key, score_col=None):
+    """Choose a CURRENT output row to explain; never use a fixed tutorial row."""
+    if frame.empty:
+        return None
+    if len(frame) == 1:
+        st.caption('Penjelasan di bawah menggunakan satu-satunya baris hasil yang tersedia.')
+        return frame.iloc[0]
+    def describe(pos):
+        row = frame.iloc[pos]
+        label = str(row[label_col])
+        if score_col is not None:
+            try:
+                label += f' · {score_col}: {float(row[score_col]):.4f}'
+            except (ValueError, TypeError):
+                pass
+        return label
+    pos = st.selectbox(
+        '🔎 Pilih baris hasil yang ingin dijelaskan perhitungannya',
+        options=list(range(len(frame))),
+        format_func=describe,
+        key=key,
+    )
+    st.caption('Angka dan langkah perhitungan di bawah mengikuti baris hasil yang dipilih.')
+    return frame.iloc[pos]
+
+
+def selectable_rules(rules):
+    """Return current displayed association rules, with a human-readable rule name."""
+    rows = rules.sort_values(['lift', 'confidence'], ascending=False).reset_index(drop=True).copy()
+    if not rows.empty:
+        rows['Aturan dipilih'] = [
+            ', '.join(sorted(a)) + ' → ' + ', '.join(sorted(b))
+            for a, b in zip(rows['antecedents'], rows['consequents'])
+        ]
+    return rows
+
+
+def explain_result(title, meaning, breakdown=None):
+    """Penjelasan ringkas yang selalu terlihat + rincian hitung opsional.
+
+    Data dan angka pada rincian dikirim oleh aktivitas yang sedang ditampilkan,
+    sehingga contoh berubah saat input, parameter, atau dataset diubah.
+    """
+    st.markdown(f"**Memahami hasil — {title}.** {meaning}")
+    if breakdown:
+        with st.expander("Lihat asal angka dan langkah perhitungannya (klik untuk buka/tutup)", expanded=False):
+            st.markdown(breakdown)
+
+
+def section_heading(kicker, heading, description=""):
+    """A single typographic hierarchy for all analysis activities."""
     st.markdown(
-        '<div class="sidebar-profile"><div class="profile-avatar">' + html.escape(APP_USERNAME[:1].upper()) +
-        '</div><div><div class="profile-name">' + html.escape(APP_USERNAME) +
-        '</div><div class="profile-role">Akun aktif</div></div></div>',
+        f'<div class="section-head tight"><div class="section-kicker">{kicker}</div>'
+        f'<div class="section-title">{heading}</div>'
+        f'<div class="section-desc">{description}</div></div>',
         unsafe_allow_html=True,
     )
-    with st.container(key="signout_panel"):
-        if st.button("Keluar dari Sistem", key="signout_button", icon=":material/logout:", use_container_width=True):
-            show_logout_dialog()
 
-# Data may have been replaced in the sidebar by an import. Rebind to the newest dict.
-C = st.session_state["candidates"]
-I = st.session_state["interviews"]
-ranked = ranking_rows(C, I, weights, high, mid)
 
-if menu == "Mulai di Sini":
-    fully_scored = len(ranked)
-    recommended = sum(r["Rekomendasi"] == "Direkomendasikan" for r in ranked)
-    pending = len(C) - fully_scored
-    avg = sum(r["Skor"] for r in ranked) / fully_scored if fully_scored else 0
-    rate = (fully_scored / len(C) * 100) if C else 0
-
-    st.markdown('<div class="topline"><span class="workspace">RECRUITMENT / OVERVIEW</span><span class="availability">● Workspace aktif</span></div>', unsafe_allow_html=True)
-    st.markdown(f"""<div class="hero"><div class="hero-main"><div class="eyebrow">INTERNSHIP RECRUITMENT  ·  2026</div><h1>Kelola kandidat.<br>Temukan talenta terbaik.</h1><p>Satu ruang kerja untuk pendataan peserta magang, wawancara, evaluasi kompetensi, dan pemeringkatan kandidat yang objektif.</p></div><div class="hero-right"><div class="tiny">Progress Interview</div><div class="count">{rate:.0f}%</div><div class="tiny">{fully_scored} dari {len(C)} peserta dinilai</div></div></div>""", unsafe_allow_html=True)
-
-    c1,c2,c3,c4 = st.columns(4, gap="medium")
-    with c1: metric_card("Total Kandidat", len(C), "Terdaftar dalam sistem", "♙")
-    with c2: metric_card("Interview Selesai", fully_scored, "Seluruh aspek telah dinilai", "✓")
-    with c3: metric_card("Direkomendasikan", recommended, "Berdasarkan skor otomatis", "✦")
-    with c4: metric_card("Rata-rata Skor", f"{avg:.1f}", "Dari total 100 poin", "◈")
-
-    left,right = st.columns([1.25,1], gap="large")
-    with left:
-        st.markdown('<div class="section-heading">Monitoring Seleksi</div>', unsafe_allow_html=True)
-        with st.container(border=True):
-            panel_head("Progres Interview", "Pemantauan kelengkapan proses penilaian")
-            st.markdown(f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:2rem;font-weight:800;color:#12304d">{fully_scored}<span style="font-size:.95rem;color:#8497aa;font-weight:500"> / {len(C)} kandidat</span></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="progress-track"><div class="progress-fill" style="width:{rate:.2f}%"></div></div><div class="progress-caption"><span>{rate:.0f}% selesai</span><span>{pending} belum lengkap</span></div>', unsafe_allow_html=True)
-            st.write("")
-            status_row("Interview selesai", fully_scored, "#23b38c")
-            status_row("Belum lengkap / belum mulai", pending, "#f0ab48")
-            status_row("Total data peserta", len(C), "#426bd4")
-        with st.container(border=True):
-            panel_head("Kandidat Berperingkat", "Skor tertinggi dari hasil interview lengkap")
-            if ranked:
-                for r in ranked[:5]:
-                    st.markdown(f'<div class="status-row"><div class="status-meta"><span class="count-pill">#{r["Ranking"]}</span>{html.escape(r["Nama Kandidat"][:46])}</div><span style="font-weight:800;color:#2657b7">{r["Skor"]:.1f}</span></div>', unsafe_allow_html=True)
-            else:
-                blank_state("Peringkat akan muncul setelah penilaian tujuh aspek pertama selesai.")
-    with right:
-        st.markdown('<div class="section-heading">Ringkasan Keputusan</div>', unsafe_allow_html=True)
-        with st.container(border=True):
-            panel_head("Rekomendasi Otomatis", "Hasil sistem berdasarkan bobot pada template Excel")
-            status_row("Direkomendasikan", recommended, "#23b38c")
-            status_row("Dipertimbangkan", sum(r["Rekomendasi"] == "Dipertimbangkan" for r in ranked), "#e0a23a")
-            status_row("Belum Direkomendasikan", sum(r["Rekomendasi"] == "Belum Direkomendasikan" for r in ranked), "#eb7180")
-        with st.container(border=True):
-            panel_head("Keputusan Pewawancara", "Hasil final yang ditetapkan secara manual")
-            for label,color in [("Lolos","#23b38c"),("Cadangan","#e0a23a"),("Tidak Lolos","#eb7180"),("Menunggu","#94a3b8")]:
-                status_row(label, sum((I.get(cid,{ }).get("keputusan") or "Menunggu") == label for cid in C), color)
-        with st.container(border=True):
-            panel_head("Langkah Selanjutnya", "Ikuti alur yang terstruktur")
-            for no,title,desc in [("01","Daftarkan kandidat","Input identitas, perguruan tinggi dan pengalaman"),("02","Lakukan interview","Isi jawaban, catatan, dan tujuh aspek nilai"),("03","Tinjau hasil","Bandingkan ranking dan putuskan status akhir")]:
-                st.markdown(f'<div class="step"><div class="step-num">{no}</div><div class="step-body"><b>{title}</b><small>{desc}</small></div></div>', unsafe_allow_html=True)
-    st.caption("Data kandidat dan hasil interview yang disimpan tersedia kembali saat login. Download Excel untuk cadangan berkala.")
-
-elif menu == "Data Kandidat":
-    section(
-        "CANDIDATE DATABASE", "Data Kandidat",
-        "Lengkapi data satu peserta dari identitas hingga preferensi magang, kemudian simpan sekali di bagian paling bawah.",
+def chart_layout(fig, height=360):
+    chart_accent = {
+        "Apriori Analysis":"#2563EB", "Market Basket Analysis":"#0F9D8A",
+        "Content-Based Recommendation":"#7C3AED", "Movie Recommendation":"#7C3AED",
+        "User-Based Collaborative Filtering":"#08916B",
+        "Item-Based Collaborative Filtering":"#08916B", "Hybrid Recommendation":"#EA580C",
+    }.get(page, "#2563EB")
+    fig.update_layout(
+        template="plotly_white", height=height,
+        paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
+        margin=dict(l=15, r=15, t=45, b=25),
+        font=dict(color="#334155", size=14),
+        colorway=[chart_accent, "#7C3AED", "#059669", "#EA580C"],
+        title_font=dict(color="#172B4D", size=17),
+        autosize=True,
+        xaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6", automargin=True),
+        yaxis=dict(gridcolor="#E9EEF6", zerolinecolor="#E9EEF6", automargin=True),
+        legend=dict(orientation="h", y=-0.22, x=0),
     )
+    # Only recolor plain bar traces; continuous-color visualizations keep their meaningful scale.
+    for trace in fig.data:
+        if getattr(trace, "type", None) == "bar" and getattr(trace, "marker", None) is not None:
+            current = getattr(trace.marker, "color", None)
+            if current is None or (isinstance(current, str) and current.lower() == "#636efa"):
+                trace.marker.color = chart_accent
+    st.plotly_chart(fig, use_container_width=True, config={"responsive":True,"displaylogo":False})
 
-    # After saving a NEW candidate, stay on the newly saved profile instead of
-    # unexpectedly showing the blank form for the NEXT candidate (MG-002, etc.).
-    options = ["➕ Tambah Kandidat Baru"] + sorted(C.keys())
-    pending = st.session_state.pop("candidate_pending_selection", None)
-    if pending in options:
-        st.session_state["candidate_choice"] = pending
-    if st.session_state.get("candidate_choice") not in options:
-        st.session_state["candidate_choice"] = options[0]
+@st.cache_data(show_spinner=False)
+def groceries_raw():
+    return pd.read_csv(DATA / "groceries.csv", header=None, dtype=str)
 
-    selector_col, delete_col = st.columns([4, 1], gap="medium", vertical_alignment="bottom")
-    with selector_col:
-        choice = st.selectbox(
-            "Pilih kandidat untuk tambah / edit / hapus data",
-            options,
-            format_func=lambda x: f"{x} — {C[x].get('nama', '')}" if x in C else x,
-            key="candidate_choice",
-        )
-    existing = choice in C
-    if existing:
-        cid = choice
+
+@st.cache_data(show_spinner=False)
+def movies_raw():
+    return pd.read_csv(DATA / "movie.csv")
+
+
+@st.cache_data(show_spinner=False)
+def ratings_raw():
+    return pd.read_csv(DATA / "rating.csv")
+
+
+@st.cache_data(show_spinner=False)
+def book_interactions():
+    return pd.read_csv(DATA / "book_knn_interactions.csv.gz", compression="gzip")
+
+
+def transactions_from_frame(frame):
+    return [list(dict.fromkeys(str(x).strip() for x in row.dropna().tolist() if str(x).strip() and str(x).strip().lower() != 'nan')) for _,row in frame.iterrows() if row.notna().any()]
+
+
+def association_rules_inclusive(itemsets, minimum_confidence):
+    """Batas confidence bersifat inklusif, termasuk nilai tepat di ambang.
+
+    Misalnya 0.6 / 0.8 di floating-point menjadi 0.7499999999999999,
+    sehingga 75% bisa terbuang jika langsung dibandingkan dengan 0.75.
+    Toleransi numerik kecil ini mengatasi masalah tersebut.
+    """
+    threshold = max(0.0, float(minimum_confidence) - 1e-12)
+    return association_rules(itemsets, metric="confidence", min_threshold=threshold)
+
+
+def apriori_tables(transactions, minimum_support, minimum_confidence, maximum_length=None):
+    encoder=TransactionEncoder()
+    encoded = encoder.fit(transactions).transform(transactions)
+    basket = pd.DataFrame(encoded, columns=encoder.columns_)
+    itemsets = apriori(basket, min_support=minimum_support, use_colnames=True, max_len=maximum_length)
+    if len(itemsets):
+        rules = association_rules_inclusive(itemsets, minimum_confidence)
     else:
-        if "new_candidate_draft_id" not in st.session_state:
-            try:
-                st.session_state["new_candidate_draft_id"] = reserve_candidate_id()
-            except DatabaseOperationError as exc:
-                st.error(str(exc))
-                st.stop()
-        cid = st.session_state["new_candidate_draft_id"]
-    initial = C[choice].copy() if existing else {}
-    with delete_col:
-        if st.button(
-            "Hapus Kandidat",
-            icon=":material/delete:",
-            disabled=not existing,
-            help="Hapus kandidat terpilih beserta seluruh hasil interview terkait.",
+        rules = pd.DataFrame()
+    return itemsets, rules, basket
+
+
+@st.cache_data(show_spinner="Menghitung Apriori dan aturan asosiasi...")
+def run_groceries(support, confidence, max_len, uploaded_bytes=None):
+    frame = pd.read_csv(BytesIO(uploaded_bytes), header=None, dtype=str) if uploaded_bytes else groceries_raw()
+    transactions = transactions_from_frame(frame)
+    # Pengaman Streamlit Cloud: hindari Apriori tanpa batas panjang itemset.
+    # low_memory=True menurunkan konsumsi memori saat membangkitkan kandidat.
+    if max_len not in (2, 3):
+        raise ValueError("Panjang kombinasi hanya boleh 2 atau 3 untuk dashboard cloud.")
+    if len(transactions) > 50000:
+        raise ValueError("Dataset terlalu besar untuk paket cloud ini (maksimal 50.000 transaksi).")
+    encoder = TransactionEncoder()
+    encoded = encoder.fit(transactions).transform(transactions)
+    basket = pd.DataFrame(encoded, columns=encoder.columns_)
+    if basket.shape[1] > 300:
+        raise ValueError("Dataset memiliki lebih dari 300 jenis barang. Saring dahulu item yang jarang muncul.")
+    itemsets = apriori(basket, min_support=support, use_colnames=True,
+                      max_len=max_len, low_memory=True)
+    rules = association_rules_inclusive(itemsets, confidence) if len(itemsets) else pd.DataFrame()
+    freq = basket.sum().sort_values(ascending=False)
+    return itemsets, rules, freq, len(transactions), basket.shape[1]
+
+
+def pretty_itemsets(frame):
+    d=frame.copy()
+    if 'itemsets' in d.columns:
+        d['itemsets'] = d['itemsets'].apply(lambda s: ', '.join(sorted(s)))
+    return d
+
+
+def pretty_rules(frame):
+    if frame.empty:
+        return pd.DataFrame(columns=['Jika membeli', 'Maka membeli', 'Support', 'Confidence', 'Lift'])
+    d=frame.copy()
+    d['Jika membeli']=d['antecedents'].apply(lambda s:', '.join(sorted(s)))
+    d['Maka membeli']=d['consequents'].apply(lambda s:', '.join(sorted(s)))
+    return d[['Jika membeli','Maka membeli','support','confidence','lift']].rename(columns={'support':'Support','confidence':'Confidence','lift':'Lift'}).sort_values(['Lift','Confidence'],ascending=False).reset_index(drop=True)
+
+
+EXAMPLE_BASKET = [
+    ['Roti', 'Susu', 'Mentega'], ['Roti', 'Mentega'],
+    ['Roti', 'Susu', 'Selai'], ['Apel', 'Pisang'],
+    ['Roti', 'Susu', 'Mentega', 'Selai']
+]
+
+EXAMPLE_CONTENT = pd.DataFrame({
+    'Judul':['The Matrix','Inception','Interstellar','The Notebook','Titanic'],
+    'Deskripsi':[
+        'Action sci-fi hacker virtual reality computer illusion',
+        'Action sci-fi dream mind control heist illusion',
+        'Sci-fi space travel black hole time relativity',
+        'Romance love story drama beautiful couple memory',
+        'Romance drama ship tragedy beautiful love ocean']
+})
+
+EXAMPLE_RATINGS = pd.DataFrame({
+    'Pengguna':['Andi','Andi','Andi','Budi','Budi','Citra','Citra','Citra','Citra'],
+    'Film':['The Matrix','Inception','Avatar','The Matrix','Inception','The Matrix','Inception','Avatar','Titanic'],
+    'Rating':[5,4,1,4,5,4,5,1,5]
+})
+EXAMPLE_HYBRID = pd.DataFrame({
+    'Movie':['The Matrix','Inception','Avatar','Titanic','The Notebook'],
+    'Genre':['Action Sci-Fi','Action Sci-Fi','Sci-Fi Adventure','Romance Drama','Romance Drama']
+})
+
+
+def ratings_matrix(frame):
+    matrix=frame.pivot_table(index='Pengguna', columns='Film',values='Rating').fillna(0)
+    sim=pd.DataFrame(cosine_similarity(matrix), index=matrix.index,columns=matrix.index)
+    return matrix,sim
+
+
+@st.cache_data(show_spinner=False)
+def prep_movies():
+    movies=movies_raw().copy()
+    movies['title_year']=movies['title'].str.strip()
+    movies['year']=pd.to_numeric(movies['title_year'].str.extract(r'\((\d{4})\)\s*$')[0],errors='coerce')
+    movies['title_clean']=movies['title_year'].str.replace(r'\s*\(\d{4}\)\s*$', '',regex=True)
+    movies=movies[movies.genres.fillna('(no genres listed)')!='(no genres listed)'].copy().reset_index(drop=True)
+    genre_text=movies.genres.str.replace('|',' ',regex=False).str.replace('Sci-Fi','Scifi',regex=False).str.replace('Film-Noir','Noir',regex=False)
+    vector=TfidfVectorizer(stop_words='english')
+    matrix=vector.fit_transform(genre_text)
+    return movies,matrix
+
+
+@st.cache_resource(show_spinner="Menyiapkan matriks buku dan model kNN...")
+def prep_books():
+    books=book_interactions()
+    pivot = books.pivot_table(index='bookTitle',columns='userID',values='bookRating',aggfunc='mean',fill_value=0)
+    sparse=csr_matrix(pivot.to_numpy(dtype=np.float32))
+    knn=NearestNeighbors(metric='cosine',algorithm='brute')
+    knn.fit(sparse)
+    return pivot,sparse,knn
+
+
+def render_overview():
+    st.markdown('''<div class="hero hero-overview">
+      <div class="hero-overview-copy">
+        <div class="hero-pill"><span class="hero-dot"></span> BIG DATA ANALYTICS · MMT ITS</div>
+        <h1>Build insights with<br><span>Recommendation Systems</span></h1>
+        <p>Laboratorium pembelajaran interaktif untuk memahami metode sistem rekomendasi,
+        mengeksplorasi data, dan membandingkan hasil analisis melalui tujuh aktivitas praktik.</p>
+        <div class="hero-overview-foot">
+          <span>Association Rules</span><span>Content-Based</span>
+          <span>Collaborative</span><span>Hybrid</span>
+        </div>
+      </div>
+      <div class="hero-illustration" aria-hidden="true">
+        <div class="hero-orbit">
+          <div class="hero-core">
+            <svg width="51" height="51" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M13 15L25 10L39 19L33 36L17 40L13 15Z" stroke="white" stroke-width="2.4" stroke-linejoin="round" opacity=".8"/>
+              <path d="M13 15L28 25L39 19M28 25L33 36L17 40L13 15" stroke="white" stroke-width="1.7" opacity=".65"/>
+              <circle cx="13" cy="15" r="4" fill="white"/><circle cx="25" cy="10" r="4" fill="white"/>
+              <circle cx="39" cy="19" r="4" fill="white"/><circle cx="28" cy="25" r="5" fill="#B6F3E8"/>
+              <circle cx="33" cy="36" r="4" fill="white"/><circle cx="17" cy="40" r="4" fill="white"/>
+            </svg>
+          </div>
+        </div>
+        <div class="hero-satellite s1"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"><path d="M4 19V10M10 19V5M16 19v-8M22 19V8"/></svg></div>
+        <div class="hero-satellite s2"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="12" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M8 11l8-4M8 13l8 4"/></svg></div>
+        <div class="hero-satellite s3"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"><path d="M4 13l5-5 4 4 7-7M16 5h4v4"/></svg></div>
+      </div>
+    </div>''', unsafe_allow_html=True)
+    # Gutter konten tanpa kolom pembungkus: hindari nested-column API exception.
+    # Hanya Overview, sehingga layout tujuh aktivitas lain tidak berubah.
+    with st.container(key="overview_content", border=False):
+        metrics([("Modul Pembelajaran", "4"), ("Aktivitas Praktik", "7")])
+        st.caption('Empat modul adalah kelompok metode: Association Rules, Content-Based, '
+                   'Collaborative Filtering, dan Hybrid. Tujuh aktivitas adalah halaman praktik '
+                   'Apriori, Market Basket, Content-Based, Movie, User-Based, Item-Based, dan Hybrid.')
+        st.markdown('''<div class="section-head">
+          <div class="section-kicker">EXPLORE OUR MODULES</div>
+          <div class="section-title">Learning Modules</div>
+          <div class="section-desc">Empat pendekatan utama untuk memahami cara kerja sistem rekomendasi.
+          Setiap modul menjelaskan tujuan pembelajaran, konsep yang digunakan, dan keluaran analisis.</div>
+        </div>''', unsafe_allow_html=True)
+
+        modules = [
+            dict(
+                no="01", name="Association Rule Mining", mark="◆", color="#2563EB", bg="#EAF1FF",
+                outcome_bg="#EFF5FF", desc="Mempelajari cara menemukan keterkaitan antarbarang "
+                "dari riwayat transaksi, termasuk barang yang sering dibeli bersamaan.",
+                lessons="Apriori, frequent itemsets, support, confidence, dan lift.",
+                outcome="Pola pembelian dan aturan asosiasi", foot="2 aktivitas · Apriori & Market Basket",
+                actions=[(1,"Apriori"),(2,"Market Basket")],
+            ),
+            dict(
+                no="02", name="Content-Based Filtering", mark="▣", color="#7C3AED", bg="#F1ECFF",
+                outcome_bg="#F7F3FF", desc="Mempelajari bagaimana kesamaan isi dan karakteristik "
+                "item digunakan untuk merekomendasikan film yang memiliki ciri serupa.",
+                lessons="TF-IDF, cosine similarity, dan pemeringkatan kemiripan konten.",
+                outcome="Daftar rekomendasi film serupa", foot="2 aktivitas · Content-Based & Movie",
+                actions=[(3,"Content-Based"),(4,"Movie")],
+            ),
+            dict(
+                no="03", name="Collaborative Filtering", mark="◉", color="#059669", bg="#E7F8F0",
+                outcome_bg="#EEFAF4", desc="Mempelajari rekomendasi berdasarkan kesamaan "
+                "preferensi pengguna dan pola penilaian antaritem.",
+                lessons="User-Based Filtering serta Item-Based Filtering dengan kNN.",
+                outcome="Rekomendasi dari pola rating", foot="2 aktivitas · User-Based & Item-Based",
+                actions=[(5,"User-Based"),(6,"Item-Based")],
+            ),
+            dict(
+                no="04", name="Hybrid Recommendation", mark="◇", color="#EA580C", bg="#FFF0E5",
+                outcome_bg="#FFF7ED", desc="Mempelajari penggabungan rekomendasi "
+                "berbasis kesamaan konten dan preferensi pengguna agar keputusan memanfaatkan beberapa sumber informasi.",
+                lessons="Kombinasi skor Content-Based dan Collaborative, normalisasi, serta pembobotan.",
+                outcome="Rekomendasi gabungan dan pemeringkatan", foot="1 aktivitas · Hybrid Recommendation",
+                actions=[(7,"Hybrid Recommendation")],
+            ),
+        ]
+
+        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+        for start in range(0, len(modules), 2):
+            columns = st.columns(2, gap="large")
+            for col, module in zip(columns, modules[start:start+2]):
+                with col:
+                    with st.container(border=True):
+                        st.markdown(f'''
+                        <div class="module-top" style="border-top:3px solid {module['color']};padding-top:17px">
+                          <div class="module-icon" style="background:{module['bg']};color:{module['color']}">{module['mark']}</div>
+                          <div class="module-index">MODULE {module['no']} / 04</div>
+                        </div>
+                        <div class="module-title" style="color:{module['color']}">{module['name']}</div>
+                        <div class="module-desc">{module['desc']}</div>
+                        <div class="module-divider"></div>
+                        <div class="module-label">Yang dipelajari</div>
+                        <div class="module-study">{module['lessons']}</div>
+                        <div class="module-outcome" style="background:{module['outcome_bg']}">
+                          <div class="module-outcome-label">HASIL ANALISIS</div>
+                          <div class="module-outcome-text" style="color:{module['color']}">{module['outcome']}</div>
+                        </div>
+                        <div class="module-foot">{module['foot']}</div>
+                        ''', unsafe_allow_html=True)
+                        actions = st.columns(len(module["actions"]))
+                        for button_col, (idx, name) in zip(actions, module["actions"]):
+                            with button_col:
+                                st.button(name, key=f"overview_{idx}", icon=":material/arrow_forward:",
+                                          use_container_width=True, on_click=select_nav, args=(idx,))
+
+
+        st.markdown('''<div class="section-head">
+  <div class="section-kicker">FROM DATA TO INSIGHT</div>
+  <div class="section-title">How Recommendation Systems Work</div>
+  <div class="section-desc">Dari data awal hingga rekomendasi yang dapat digunakan.</div>
+</div>
+<div class="journey-shell">
+  <div class="journey-head">
+    <div>
+      <div class="journey-heading">Dari Data Menjadi Rekomendasi</div>
+      <div class="journey-subheading">Lima tahapan inti dalam proses analisis</div>
+    </div>
+    <div class="journey-pill">5 LANGKAH · 1 ALUR</div>
+  </div>
+  <div class="journey-grid">
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 01</div><div class="journey-name">Dataset</div>
+      <div class="journey-description">Kumpulkan data transaksi, konten, atau rating.</div></div>
+    </div>
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z"/><path d="M8 5v3"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 02</div><div class="journey-name">Persiapan Data</div>
+      <div class="journey-description">Bersihkan dan susun data agar siap dianalisis.</div></div>
+    </div>
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.5" fill="none"/><circle cx="15" cy="17" r="2.5" fill="none"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 03</div><div class="journey-name">Pemilihan Metode</div>
+      <div class="journey-description">Terapkan Apriori, Content-Based, atau Collaborative.</div></div>
+    </div>
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17v-6M12 17V5M18 17V9"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 04</div><div class="journey-name">Analisis Hasil</div>
+      <div class="journey-description">Evaluasi pola, kemiripan, atau skor rekomendasi.</div></div>
+    </div>
+    <div class="journey-step">
+      <div class="journey-node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg></div>
+      <div class="journey-text"><div class="journey-num">STEP 05</div><div class="journey-name">Rekomendasi</div>
+      <div class="journey-description">Tampilkan barang atau film yang paling relevan.</div></div>
+    </div>
+  </div>
+  <div class="journey-footer"><span class="journey-footer-dot"></span><span>Alur ini merupakan gambaran umum. Tahapan rinci menyesuaikan metode yang digunakan pada setiap modul.</span></div>
+</div>''', unsafe_allow_html=True)
+
+        st.markdown('''<div class="section-head">
+          <div class="section-kicker">DATA SOURCES</div>
+          <div class="section-title">Informasi Dataset</div>
+          <div class="section-desc">Ringkasan data yang digunakan pada masing-masing aktivitas praktik.</div>
+        </div>''', unsafe_allow_html=True)
+        groceries = groceries_raw()
+        movies = movies_raw()
+        books = book_interactions()
+        dataset_info = pd.DataFrame([
+            ["Apriori contoh", "Data transaksi pada materi", 5, "Transaksi sederhana"],
+            ["Groceries", "groceries.csv", len(groceries), "Baris transaksi"],
+            ["MovieLens", "movie.csv", len(movies), "Film"],
+            ["MovieLens rating", "rating.csv", len(ratings_raw()), "Rating tambahan dalam arsip"],
+            ["Book-Crossing — data tersaring", "book_knn_interactions.csv.gz", len(books), "Interaksi rating terpilih"],
+            ["User-Based dan Hybrid", "Data contoh pada materi", len(EXAMPLE_RATINGS), "Baris rating contoh"],
+        ], columns=["Dataset", "Sumber", "Jumlah baris", "Keterangan"])
+        compact_dataframe(dataset_info, hide_index=True, use_container_width=True)
+        explain_result('jumlah baris dataset',
+            'Jumlah baris dihitung langsung dari file CSV atau data contoh yang digunakan, '
+            'sebelum filter khusus masing-masing algoritma. Jumlah film valid, buku unik, '
+            'atau jumlah transaksi yang dihitung dapat berbeda setelah proses penyaringan.',
+            'Contoh: satu baris pada `rating.csv` berarti satu catatan rating, '
+            'sedangkan satu baris pada `movie.csv` berarti satu film. '
+            'Interaksi rating buku tidak sama dengan jumlah judul buku unik.')
+        st.caption(
+            "File music.csv dan Online Retail.xlsx tersedia dalam paket materi, namun tidak dipakai langsung "
+            "oleh tujuh aktivitas yang ditampilkan."
+        )
+
+def render_apriori():
+    hero('AKTIVITAS 01 · ASSOCIATION RULE', 'Apriori pada transaksi contoh', 'Mencari kombinasi barang yang sering dibeli bersama menggunakan lima transaksi berdasarkan materi.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
+    up=st.file_uploader('Opsional: unggah CSV transaksi sendiri (tiap baris = satu transaksi; tanpa header)', type=['csv'], key='up_a1')
+    if up:
+        tx=transactions_from_frame(pd.read_csv(BytesIO(up.getvalue()),header=None,dtype=str))
+    else: tx=EXAMPLE_BASKET
+    if not tx:
+        st.warning('CSV tidak memiliki transaksi yang dapat dianalisis.');return
+    st.info('**Penting:** minimum support dan minimum confidence adalah **batas penyaringan**, '
+            'bukan pengubah angka support, confidence, atau lift suatu aturan. '
+            'Selama data transaksi tetap sama, skor aturan yang sama juga tetap sama. '
+            'Yang berubah saat slider digeser adalah aturan atau kombinasi yang lolos batas.')
+    a,b=st.columns(2)
+    with a: support=st.slider('Minimum support',0.1,1.0,0.4,0.05,key='sup_a1')
+    with b: confidence=st.slider('Minimum confidence',0.1,1.0,0.7,0.05,key='conf_a1')
+    itemsets,rules,basket=apriori_tables(tx,support,confidence)
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
+    metrics([('Transaksi',f'{len(tx):,}'),('Jenis barang',str(basket.shape[1])),('Frequent itemsets',str(len(itemsets))),('Association rules',str(len(rules)))])
+    t1,t2,t3=st.tabs(['Data transaksi','Frequent itemsets','Aturan asosiasi'])
+    with t1:
+        compact_dataframe(pd.DataFrame({'Transaksi':[i+1 for i in range(len(tx))], 'Isi keranjang':[', '.join(t) for t in tx]}), hide_index=True,use_container_width=True)
+        compact_dataframe(basket.head(15),use_container_width=True)
+        explain_result(
+            'data transaksi dan tabel 0/1',
+            f'Terdapat **{len(tx)} transaksi** dan **{basket.shape[1]} jenis barang unik**. '
+            'Satu baris mewakili satu keranjang; True berarti barang tersebut ada di keranjang, '
+            'False berarti tidak ada.',
+            'Kolom tiap barang dibuat dari seluruh nama barang unik yang muncul. '
+            'Tabel True/False inilah yang dihitung algoritma Apriori untuk mencari barang '
+            'yang sering dibeli bersama.'
+        )
+    with t2:
+        st.markdown('Kombinasi barang yang memiliki nilai support ≥ batas pilihan.')
+        show_table(pretty_itemsets(itemsets),'apriori_frequent_itemsets.csv')
+        if not itemsets.empty:
+            available_items = itemsets.sort_values('support', ascending=False).reset_index(drop=True).copy()
+            available_items['Kombinasi'] = available_items['itemsets'].apply(lambda x: ', '.join(sorted(x)))
+            chosen_item = choose_explanation_row(available_items, 'Kombinasi', 'detail_a1_itemsets', 'support')
+            goods = sorted(chosen_item['itemsets'])
+            appearances = int(basket[goods].all(axis=1).sum())
+            explain_result(
+                'frequent itemsets',
+                f'Setiap baris merupakan barang atau kombinasi barang yang muncul pada '
+                f'setidaknya **{support:.0%} dari {len(tx)} transaksi**. Angka support adalah '
+                'frekuensi kemunculan bersama dibagi jumlah seluruh transaksi.',
+                f'**Contoh dari hasil saat ini: {", ".join(goods)}**. '
+                f'Kombinasi ini ditemukan pada **{appearances} dari {len(tx)} transaksi**.  '
+                f'\n\nSupport = {appearances} ÷ {len(tx)} = **{chosen_item["support"]:.4f}** '
+                f'({chosen_item["support"]:.1%}). Hasilnya memenuhi batas support {support:.0%}.'
+            )
+        else:
+            explain_result('frequent itemsets',
+                f'Tidak ada kombinasi yang mencapai minimum support **{support:.0%}**. '
+                'Turunkan batas support untuk menampilkan lebih banyak kombinasi.')
+    with t3:
+        display=pretty_rules(rules)
+        if display.empty: st.info('Tidak ada aturan untuk parameter yang dipilih. Coba turunkan minimum confidence atau support.')
+        else:
+            show_table(display,'apriori_rules.csv')
+            
+            graph = display.head(12).iloc[::-1].copy()
+            graph['Aturan'] = graph['Jika membeli'] + ' → ' + graph['Maka membeli']
+
+            fig = px.bar(
+                graph,
+                x='Lift',
+                y='Aturan',
+                color='Confidence',
+                orientation='h',
+                text='Lift',
+                hover_data=['Support', 'Confidence'],
+                title='Aturan dengan nilai lift terbesar'
+            )
+            
+            fig.update_yaxes(
+                categoryorder='array',
+                categoryarray=graph['Aturan'].tolist()
+            )
+
+            fig.update_traces(
+                texttemplate='%{text:.2f}',
+                textposition='outside'
+            )
+
+            chart_layout(fig, height=420)
+            example = choose_explanation_row(selectable_rules(rules), 'Aturan dipilih', 'detail_a1_rules', 'lift')
+            a_items = sorted(example['antecedents'])
+            b_items = sorted(example['consequents'])
+            a_n = int(basket[a_items].all(axis=1).sum())
+            b_n = int(basket[b_items].all(axis=1).sum())
+            ab_n = int(basket[a_items+b_items].all(axis=1).sum())
+            explain_result(
+                'support, confidence, dan lift',
+                f'Aturan **{", ".join(a_items)} → {", ".join(b_items)}** '
+                f'memiliki support **{example["support"]:.3f}**, confidence '
+                f'**{example["confidence"]:.3f}**, dan lift **{example["lift"]:.3f}**. '
+                'Lift lebih dari 1 menunjukkan asosiasi positif; bukan hubungan sebab-akibat. '
+                f'Aturan ini lolos minimum support **{support:.0%}** dan confidence **{confidence:.0%}**.',
+                f'**Perhitungan dari {len(tx)} transaksi yang sedang digunakan:**\n\n'
+                f'- Transaksi yang memuat {", ".join(a_items)}: **{a_n}**.\n'
+                f'- Transaksi yang memuat {", ".join(b_items)}: **{b_n}**.\n'
+                f'- Transaksi yang memuat keduanya: **{ab_n}**.\n\n'
+                f'**Support** = {ab_n} ÷ {len(tx)} = **{example["support"]:.4f}**.\n\n'
+                f'**Confidence** = {ab_n} ÷ {a_n} = **{example["confidence"]:.4f}**. '
+                f'Artinya, dari {a_n} transaksi yang memuat barang pertama, '
+                f'{ab_n} juga memuat barang kedua.\n\n'
+                f'**Lift** = ({ab_n} ÷ {a_n}) ÷ ({b_n} ÷ {len(tx)}) '
+                f'= **{example["lift"]:.4f}**. Nilai ini membandingkan '
+                'confidence dengan frekuensi dasar barang yang disarankan.'
+            )
+        if display.empty:
+            explain_result('aturan asosiasi',
+                f'Tidak ada aturan yang memenuhi confidence **{confidence:.0%}** '
+                f'dan support **{support:.0%}** sekaligus. Ini bukan kesalahan perhitungan.')
+
+    note('<b>Interpretasi:</b> support menunjukkan proporsi transaksi yang memuat kombinasi barang; confidence menunjukkan peluang barang konsekuen muncul saat anteseden muncul; lift &gt; 1 menunjukkan asosiasi positif relatif terhadap peluang dasarnya.')
+
+
+def render_groceries():
+    hero('AKTIVITAS 02 · ASSOCIATION RULE', 'Market Basket Analysis (Groceries)',
+         'Eksplorasi transaksi belanja dan aturan Apriori menggunakan dataset Groceries berdasarkan materi.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
+    st.info('**Cara kerja parameter:** ubah nilai lalu klik **Jalankan Analisis** untuk memperbarui hasil. '
+            'Dashboard tidak akan menampilkan hasil lama sebagai hasil parameter baru. '
+            'Support dan confidence adalah ambang filter; skor aturan tetap jika dataset sama.')
+
+    
+    with st.container(border=True):
+        up = st.file_uploader(
+            'Opsional: ganti data dengan CSV transaksi (tanpa header)',
+            type=['csv'],
+            key='up_gro'
+        )
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            support = st.number_input(
+                'Minimum support',
+                min_value=0.001,
+                max_value=0.1,
+                value=0.005,
+                step=0.001,
+                format='%.3f',
+                key='sup_g',
+                help='0,005 berarti kombinasi muncul pada setidaknya 0,5% transaksi.'
+            )
+
+        with c2:
+            confidence = st.slider(
+                'Minimum confidence',
+                min_value=0.05,
+                max_value=1.0,
+                value=0.8,
+                step=0.05,
+                key='conf_g'
+            )
+
+        with c3:
+            max_len = st.selectbox(
+                'Panjang kombinasi maksimal',
+                [2, 3],
+                index=0,
+                key='maxlen_g',
+                help='Dibatasi pada 2 atau 3 item untuk menjaga penggunaan RAM di Streamlit Cloud.'
+            )
+
+        submitted = st.button(
+            '▶ Jalankan Analisis',
+            type='primary',
             use_container_width=True,
-            key="open_candidate_delete_dialog",
-        ):
-            show_delete_candidate_dialog(cid, initial.get("nama", ""))
-    if message := st.session_state.pop("candidate_deleted_notice", None):
-        st.success(message)
-    if message := st.session_state.pop("candidate_saved_notice", None):
-        st.success(message)
-
-    st.caption(f"ID Kandidat: **{cid}** · Kapasitas ekspor Excel: {len(C)}/{MAX_KANDIDAT}")
-    if existing:
-        st.info("**Mode Edit:** Anda sedang membuka profil kandidat yang sudah tersimpan. Ubah nama, alamat, kampus, atau kolom lain yang diperlukan, lalu klik **Simpan Perubahan Kandidat** di bagian akhir. Untuk menghapus profil, gunakan tombol **Hapus Kandidat** di sebelah pemilih peserta.")
-    else:
-        st.info("Isi seluruh bagian formulir berikut untuk **satu kandidat**. Data baru dikirim ke PostgreSQL setelah Anda menekan **Simpan Data Kandidat** di bagian paling bawah.")
-
-    with st.form(f"form_candidate_{cid}", clear_on_submit=False):
-        result = {"id": cid}
-
-        st.markdown("### 01 · Identitas & Kontak")
-        st.caption("Informasi dasar dan kontak kandidat.")
-        a, b = st.columns(2, gap="large")
-        with a:
-            result["nama"] = st.text_input("Nama Lengkap *", value=initial.get("nama", ""))
-            result["telepon"] = st.text_input("No. HP / WA", value=initial.get("telepon", ""))
-            result["alamat"] = st.text_area("Alamat Domisili", value=initial.get("alamat", ""), height=85)
-        with b:
-            result["email"] = st.text_input("Email", value=initial.get("email", ""))
-            result["kota"] = st.text_input("Kota / Kabupaten", value=initial.get("kota", ""))
-
-        st.divider()
-        st.markdown("### 02 · Pendidikan")
-        st.caption("Asal perguruan tinggi, jenjang, dan informasi akademik.")
-        a, b = st.columns(2, gap="large")
-        with a:
-            result["kampus"] = st.text_input("Asal Perguruan Tinggi", value=initial.get("kampus", ""))
-            result["prodi"] = st.text_input("Program Studi / Jurusan", value=initial.get("prodi", ""))
-            result["ipk"] = st.number_input(
-                "IPK (0,00–4,00)", min_value=0.0, max_value=4.0,
-                value=min(max(_float(initial.get("ipk")), 0.0), 4.0),
-                step=0.01, format="%.2f",
-            )
-        with b:
-            result["jenjang"] = _select("Jenjang", initial.get("jenjang", ""), ["", "D3", "D4", "S1", "S2", "Lainnya"])
-            result["semester"] = st.number_input(
-                "Semester", min_value=0, max_value=16,
-                value=min(max(_int(initial.get("semester")), 0), 16), step=1,
-            )
-            result["status_kuliah"] = _select(
-                "Status Perkuliahan", initial.get("status_kuliah", ""),
-                ["", "Aktif", "Cuti", "Lulus", "Lainnya"],
-            )
-
-        st.divider()
-        st.markdown("### 03 · Pengalaman & Kompetensi")
-        st.caption("Pengalaman organisasi, proyek, keterampilan, dan sertifikasi.")
-        a, b = st.columns(2, gap="large")
-        with a:
-            result["pengalaman_kerja"] = st.text_area(
-                "Pengalaman Magang / Kerja", value=initial.get("pengalaman_kerja", ""), height=110,
-            )
-            result["pengalaman_organisasi"] = st.text_area(
-                "Pengalaman Organisasi", value=initial.get("pengalaman_organisasi", ""), height=110,
-            )
-            result["portofolio"] = st.text_area(
-                "Proyek / Portofolio", value=initial.get("portofolio", ""), height=110,
-            )
-        with b:
-            result["keahlian"] = st.text_area(
-                "Keahlian Utama", value=initial.get("keahlian", ""), height=110,
-            )
-            result["tools"] = st.text_area(
-                "Tools / Software", value=initial.get("tools", ""), height=110,
-            )
-            result["sertifikasi"] = st.text_area(
-                "Sertifikasi / Pelatihan", value=initial.get("sertifikasi", ""), height=110,
-            )
-        result["link"] = st.text_input("Tautan LinkedIn / Portofolio", value=initial.get("link", ""))
-
-        st.divider()
-        st.markdown("### 04 · Preferensi Magang & Berkas")
-        st.caption("Bidang yang diminati, ketersediaan, dan motivasi magang.")
-        a, b = st.columns(2, gap="large")
-        with a:
-            result["bidang"] = st.text_input("Posisi / Bidang Magang", value=initial.get("bidang", ""))
-            result["wfo"] = _select(
-                "Bersedia WFO", initial.get("wfo", ""),
-                ["", "Ya", "Tidak", "Hybrid", "Negosiasi"],
-            )
-            result["durasi"] = st.number_input(
-                "Durasi (bulan)", min_value=0, max_value=24, step=1,
-                value=min(max(_int(initial.get("durasi")), 0), 24),
-            )
-        with b:
-            result["mulai"] = st.date_input(
-                "Dapat Mulai Tanggal", value=_date(initial.get("mulai")),
-                format="DD/MM/YYYY",
-            )
-            result["status_cv"] = _select(
-                "Status CV / Berkas", initial.get("status_cv", ""),
-                ["", "Lengkap", "Belum Lengkap", "Proses Verifikasi"],
-            )
-        result["motivasi"] = st.text_area(
-            "Motivasi / Harapan Magang", value=initial.get("motivasi", ""), height=105,
+            key='run_groceries'
         )
 
-        st.divider()
-        st.markdown("**Selesai mengisi?** Periksa kembali nama, alamat, perguruan tinggi, dan pengalaman sebelum menyimpan.")
-        submitted = st.form_submit_button(
-            "💾 Simpan Perubahan Kandidat" if existing else "💾 Simpan Data Kandidat",
-            type="primary", use_container_width=True,
-        )
+    active_upload = up.getvalue() if up is not None else None
+    active_signature = (round(float(support), 8), round(float(confidence), 8),
+                        int(max_len), sha256(active_upload).hexdigest() if active_upload is not None else 'DEFAULT')
 
     if submitted:
-        if not result["nama"].strip():
-            st.error("Nama lengkap wajib diisi sebelum menyimpan.")
-        elif not existing and len(C) >= MAX_KANDIDAT:
-            st.error("Kapasitas 150 kandidat pada template ekspor Excel telah tercapai.")
-        else:
-            result["nama"] = result["nama"].strip()
-            result["mulai"] = result["mulai"].isoformat() if result["mulai"] else ""
-            try:
-                # One DB write/transaction for all 25 candidate fields.
-                save_candidate(result, create=not existing)
-            except DatabaseOperationError as exc:
-                st.error(str(exc))
-            else:
-                st.session_state["candidate_saved_notice"] = (
-                    f"Data {result['nama']} ({cid}) berhasil disimpan lengkap ke PostgreSQL. "
-                    "Anda dapat mengeditnya lagi tanpa membuat ID baru."
-                )
-                st.session_state["candidate_pending_selection"] = cid
-                if not existing:
-                    st.session_state.pop("new_candidate_draft_id", None)
-                st.rerun()
-
-    st.divider()
-    st.subheader("Daftar Kandidat")
-    st.caption("Cari dan filter kandidat sebelum mengunduh data untuk kebutuhan undangan interview.")
-    search = st.text_input(
-        "Cari nama, kampus, program studi, atau posisi",
-        placeholder="Masukkan kata kunci...", key="candidate_filter_search",
-    )
-
-    with st.container(border=True):
-        st.markdown("**Filter & Ekspor Kandidat**")
-        left, middle, right = st.columns([1.35, 1, 1.35], gap="medium")
-        with left:
-            ipk_operator = st.selectbox(
-                "Kriteria IPK",
-                ["Semua IPK", "Lebih dari (>)", "Minimal (≥)",
-                 "Kurang dari (<)", "Maksimal (≤)", "Sama dengan (=)"],
-                key="candidate_filter_ipk_operator",
-            )
-        with middle:
-            ipk_limit = st.number_input(
-                "Nilai IPK", min_value=0.0, max_value=4.0,
-                value=3.50, step=0.01, format="%.2f",
-                key="candidate_filter_ipk_limit",
-                disabled=ipk_operator == "Semua IPK",
-            )
-        with right:
-            positions = sorted({str(c.get("bidang") or "").strip()
-                                for c in C.values() if str(c.get("bidang") or "").strip()})
-            position_filter = st.selectbox(
-                "Posisi Magang", ["Semua Posisi", *positions],
-                key="candidate_filter_position",
-            )
-
-        with st.expander("Filter lanjutan (kampus, prodi, status interview, batch)"):
-            extra1, extra2 = st.columns(2, gap="medium")
-            with extra1:
-                campuses = sorted({str(c.get("kampus") or "").strip()
-                                   for c in C.values() if str(c.get("kampus") or "").strip()})
-                campus_filter = st.selectbox(
-                    "Perguruan Tinggi", ["Semua Kampus", *campuses],
-                    key="candidate_filter_campus",
-                )
-                interview_filter = st.selectbox(
-                    "Status Interview",
-                    ["Semua Status", "Belum Interview", "Draft / Belum Lengkap", "Selesai"],
-                    key="candidate_filter_interview_status",
-                )
-            with extra2:
-                majors = sorted({str(c.get("prodi") or "").strip()
-                                 for c in C.values() if str(c.get("prodi") or "").strip()})
-                major_filter = st.selectbox(
-                    "Program Studi", ["Semua Prodi", *majors],
-                    key="candidate_filter_major",
-                )
-                known_batch_codes = sorted({str(i.get("batch") or "") for i in I.values()
-                                            if str(i.get("batch") or "")}, reverse=True)
-                batch_filter = st.selectbox(
-                    "Tahun & Batch Interview", [None, *known_batch_codes, ""],
-                    format_func=lambda code: (
-                        "Semua Batch" if code is None else
-                        "Belum ditentukan" if code == "" else batch_label(code)
-                    ),
-                    key="candidate_filter_batch",
-                )
-            st.caption(
-                "Batch berasal dari data interview. Kandidat yang belum diwawancarai "
-                "umumnya belum memiliki batch, jadi gunakan Semua Batch saat membuat undangan pertama."
-            )
-        email_only = st.checkbox(
-            "Hanya kandidat yang sudah memiliki alamat email",
-            value=False, key="candidate_filter_email_only",
-        )
-
-    preview_rows = []
-    export_rows = []
-    for candidate_id, val in sorted(C.items()):
-        searchable = " ".join(str(val.get(field, "") or "")
-                              for field in ["nama", "kampus", "prodi", "bidang"]).casefold()
-        if search.strip() and search.strip().casefold() not in searchable:
-            continue
-        ipk = _float(val.get("ipk"), 0.0)
-        if ipk_operator == "Lebih dari (>)" and not ipk > ipk_limit:
-            continue
-        if ipk_operator == "Minimal (≥)" and not ipk >= ipk_limit:
-            continue
-        if ipk_operator == "Kurang dari (<)" and not ipk < ipk_limit:
-            continue
-        if ipk_operator == "Maksimal (≤)" and not ipk <= ipk_limit:
-            continue
-        if ipk_operator == "Sama dengan (=)" and not abs(ipk - ipk_limit) < 0.00001:
-            continue
-        if position_filter != "Semua Posisi" and str(val.get("bidang") or "").strip() != position_filter:
-            continue
-        if campus_filter != "Semua Kampus" and str(val.get("kampus") or "").strip() != campus_filter:
-            continue
-        if major_filter != "Semua Prodi" and str(val.get("prodi") or "").strip() != major_filter:
-            continue
-        interview = I.get(candidate_id)
-        score, calculated_status = calculate(interview, weights, high, mid)
-        interview_state = ("Belum Interview" if not interview else
-                           "Selesai" if score is not None else "Draft / Belum Lengkap")
-        if interview_filter != "Semua Status" and interview_filter != interview_state:
-            continue
-        batch_code = str((interview or {}).get("batch") or "")
-        if batch_filter is not None and batch_filter != batch_code:
-            continue
-        email = str(val.get("email") or "").strip()
-        if email_only and not email:
-            continue
-        batch_name = batch_label(batch_code) if batch_code else "Belum ditentukan"
-        preview_rows.append({
-            "ID": candidate_id,
-            "Nama": val.get("nama", ""),
-            "Email": email,
-            "Perguruan Tinggi": val.get("kampus", ""),
-            "Program Studi": val.get("prodi", ""),
-            "IPK": ipk,
-            "Posisi": val.get("bidang", ""),
-            "Status Interview": calculated_status,
-        })
-        export_rows.append({
-            "ID": candidate_id,
-            "Nama": val.get("nama", ""),
-            "Email": email,
-            "No. HP / WA": val.get("telepon", ""),
-            "IPK": ipk,
-            "Perguruan Tinggi": val.get("kampus", ""),
-            "Program Studi": val.get("prodi", ""),
-            "Jenjang": val.get("jenjang", ""),
-            "Semester": val.get("semester", ""),
-            "Posisi Magang": val.get("bidang", ""),
-            "Kota / Kabupaten": val.get("kota", ""),
-            "Batch": batch_name,
-            "Status Interview": interview_state,
-        })
-
-    selected_count = len(export_rows)
-    email_count = sum(bool(str(r["Email"]).strip()) for r in export_rows)
-    total_count = len(C)
-    stat1, stat2, stat3 = st.columns(3, gap="medium")
-    stat1.metric("Hasil Filter", f"{selected_count} kandidat", f"Dari {total_count} kandidat")
-    stat2.metric("Email Terisi", email_count)
-    stat3.metric("Email Belum Terisi", selected_count - email_count)
-    if preview_rows:
-        _shortlist_table(preview_rows)
-        st.markdown("**Lihat Detail Kandidat**")
-        detail_left, detail_right = st.columns([3, 1], gap="medium", vertical_alignment="bottom")
-        with detail_left:
-            detail_candidate_id = st.selectbox(
-                "Pilih kandidat dari hasil filter",
-                [row["ID"] for row in preview_rows],
-                format_func=lambda candidate_id: (
-                    f"{candidate_id} — {C.get(candidate_id, {}).get('nama', '')}"
-                ),
-                key="candidate_preview_detail_choice",
-            )
-        with detail_right:
-            if st.button(
-                "🔎 Lihat Detail",
-                key="open_candidate_preview_detail",
-                use_container_width=True,
-                help="Tampilkan seluruh data kandidat dan informasi interview dalam satu jendela.",
-            ):
-                show_candidate_detail_dialog(detail_candidate_id)
         try:
-            excel_bytes = _candidate_invitation_xlsx(export_rows)
-            st.download_button(
-                "⬇ Ekspor Hasil Filter ke Excel (.xlsx)",
-                data=excel_bytes,
-                file_name=f"Undangan_Interview_Magang_{date.today().isoformat()}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary", use_container_width=True, key="candidate_export_excel",
+            with st.spinner('Menghitung aturan asosiasi. Proses berjalan dengan batas memori...'):
+                res = run_groceries(
+                    float(support),
+                    float(confidence),
+                    int(max_len),
+                    active_upload
+                )
+
+            st.session_state['groceries_last_result'] = res
+            st.session_state['groceries_last_params'] = (
+                float(support),
+                float(confidence),
+                int(max_len)
             )
-        except ImportError:
-            st.error("Ekspor Excel membutuhkan package openpyxl pada requirements.txt.")
-        with st.expander("Daftar alamat email untuk undangan (salin ke BCC)"):
-            # Use a comma-separated list for email clients; duplicates are removed.
-            addresses = list(dict.fromkeys(
-                str(row["Email"]).strip() for row in export_rows if str(row["Email"]).strip()
-            ))
-            if addresses:
-                st.code(", ".join(addresses), language=None)
-                st.caption("Periksa kembali alamat email sebelum mengirim. Daftar ini tidak mengirim email otomatis.")
+            st.session_state['groceries_last_signature'] = active_signature
+
+            st.success('Analisis berhasil dijalankan.')
+
+        except Exception as e:
+            st.error(f'Perhitungan gagal: {e}')
+            return
+
+    if 'groceries_last_result' not in st.session_state:
+        st.caption(
+            'Dataset default: 9.835 transaksi dan 169 jenis barang. '
+            'Gunakan parameter bawaan untuk uji pertama.'
+        )
+        return
+
+
+    if st.session_state.get('groceries_last_signature') != active_signature:
+        st.warning('**Input berubah, tetapi analisis belum dijalankan ulang.** '
+                   'Hasil lama disembunyikan agar tidak disalahartikan. '
+                   'Klik **Jalankan Analisis** untuk melihat hasil parameter atau dataset terbaru.')
+        return
+
+    itemsets,rules,frequency,n_orders,n_items = st.session_state['groceries_last_result']
+    s_prev,c_prev,l_prev = st.session_state['groceries_last_params']
+    st.success(f'**Hasil sudah sesuai input saat ini:** minimum support {s_prev:.3f} · '
+               f'minimum confidence {c_prev:.2f} · maksimal {l_prev} barang per kombinasi. '
+               'Besar support, confidence, dan lift suatu aturan tidak berubah karena ambang; '
+               'yang berubah adalah aturan yang lolos penyaringan.')
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
+    metrics([('Transaksi',f'{n_orders:,}'),('Jenis barang',f'{n_items:,}'),
+             ('Frequent itemsets',f'{len(itemsets):,}'),('Aturan asosiasi',f'{len(rules):,}')])
+    t1,t2,t3 = st.tabs(['Frekuensi barang','Aturan asosiasi','Analisis barang'])
+    with t1:
+        top=frequency.head(15).rename_axis('Barang').reset_index(name='Frekuensi')
+        chart_layout(px.bar(top,x='Frekuensi',y='Barang',orientation='h',title='15 jenis barang paling sering muncul'))
+        compact_dataframe(top,hide_index=True,use_container_width=True)
+        if not top.empty:
+            first=choose_explanation_row(top, 'Barang', 'detail_groceries_frequency', 'Frekuensi')
+            explain_result(
+                'frekuensi barang',
+                f'**{first["Barang"]}** muncul dalam **{int(first["Frekuensi"]):,} dari '
+                f'{n_orders:,} transaksi** ({int(first["Frekuensi"])/n_orders:.1%}). '
+                'Grafik menghitung jumlah keranjang yang memuat barang, bukan jumlah unit yang dibeli.',
+                f'Sumber: kolom hasil pengodean transaksi.\n\n'
+                f'Frekuensi = jumlah baris transaksi yang memuat **{first["Barang"]}** '
+                f'= **{int(first["Frekuensi"]):,}**.\n\n'
+                f'Proporsi = {int(first["Frekuensi"]):,} ÷ {n_orders:,} '
+                f'= **{int(first["Frekuensi"])/n_orders:.2%}**.'
+            )
+    with t2:
+        display=pretty_rules(rules)
+        if display.empty:
+            st.info('Belum ada aturan yang memenuhi batas support dan confidence. Turunkan parameternya.')
+        else:
+            show_table(display.head(250),'groceries_rules_top250.csv')
+            graph=display.head(300)
+            chart_layout(px.scatter(graph,x='Support',y='Confidence',size='Lift',
+                                    hover_data=['Jika membeli','Maka membeli'],
+                                    title='Pola support–confidence–lift'))
+            example=choose_explanation_row(selectable_rules(rules), 'Aturan dipilih', 'detail_groceries_rules', 'lift')
+            ante=', '.join(sorted(example['antecedents']))
+            cons=', '.join(sorted(example['consequents']))
+            together=round(float(example['support'])*n_orders)
+            antecedent=round(together/float(example['confidence'])) if example['confidence'] else 0
+            consequent=round(n_orders*float(example['confidence'])/float(example['lift'])) if example['lift'] else 0
+            explain_result(
+                'aturan asosiasi Groceries',
+                f'Contoh aturan **{ante} → {cons}**: support **{example["support"]:.4f}**, '
+                f'confidence **{example["confidence"]:.1%}**, lift **{example["lift"]:.2f}**. '
+                'Di grafik, sumbu horizontal menunjukkan support, vertikal confidence, '
+                'dan ukuran lingkaran mewakili lift.',
+                f'Angka jumlah transaksi berikut direkonstruksi dari skor penuh dan '
+                f'jumlah transaksi **{n_orders:,}** (dibulatkan ke bilangan bulat):\n\n'
+                f'- Mengandung kedua sisi aturan: **{together:,} transaksi**.\n'
+                f'- Mengandung sisi awal ({ante}): **{antecedent:,} transaksi**.\n'
+                f'- Mengandung sisi akhir ({cons}): **{consequent:,} transaksi**.\n\n'
+                f'**Support** ≈ {together:,} ÷ {n_orders:,} = {example["support"]:.4f}.\n\n'
+                f'**Confidence** ≈ {together:,} ÷ {antecedent:,} = {example["confidence"]:.4f}.\n\n'
+                f'**Lift** = confidence ÷ (frekuensi barang hasil ÷ total transaksi) '
+                f'= **{example["lift"]:.4f}**.\n\n'
+                f'Hanya aturan dengan support ≥ **{s_prev:.3f}** dan confidence ≥ '
+                f'**{c_prev:.2f}** yang dimasukkan.'
+            )
+        if display.empty:
+            explain_result('aturan asosiasi Groceries',
+                f'Tidak ada kombinasi yang melewati kedua ambang: support **{s_prev:.3f}** '
+                f'dan confidence **{c_prev:.2f}**.')
+    with t3:
+        display=pretty_rules(rules)
+        prod=st.selectbox('Pilih barang',list(frequency.index),key='target_g')
+        direction=st.radio('Posisi barang', ['Barang yang disarankan (RHS)','Barang yang sudah dipilih (LHS)'],horizontal=True)
+        if display.empty:
+            st.info('Belum ada aturan yang memenuhi parameter.')
+        else:
+            col='Maka membeli' if direction.startswith('Barang yang disarankan') else 'Jika membeli'
+            filtered=display[display[col].apply(lambda s:prod in [x.strip() for x in s.split(',')])]
+            if len(filtered):
+                show_table(filtered.head(30),'aturan_barang_spesifik.csv')
+                explain_result('filter aturan untuk barang tertentu',
+                    f'**{len(filtered)} aturan** memuat **{prod}** sebagai '
+                    f'{"barang yang disarankan" if direction.startswith("Barang yang disarankan") else "barang yang sudah dipilih"}. '
+                    'Artinya filter memeriksa posisi barang dalam aturan, bukan menghitung ulang Apriori.',
+                    'RHS (kanan tanda →) adalah barang yang mungkin ikut dibeli. '
+                    'LHS (kiri tanda →) adalah barang awal yang sudah ada di keranjang. '
+                    f'Aturan yang ditampilkan tetap mengikuti batas support {s_prev:.3f} '
+                    f'dan confidence {c_prev:.2f}.')
             else:
-                st.info("Belum ada alamat email yang terisi pada kandidat hasil filter.")
-    elif C:
-        st.info("Tidak ada kandidat yang memenuhi filter. Ubah kriteria untuk melihat hasil lain.")
+                st.info('Tidak ditemukan aturan untuk barang tersebut pada parameter saat ini.')
+                explain_result('filter aturan untuk barang tertentu',
+                    f'Tidak ada aturan dengan **{prod}** di posisi yang dipilih '
+                    f'dan melewati ambang support {s_prev:.3f} / confidence {c_prev:.2f}.')
+    note('Dataset yang digunakan adalah CSV Groceries dalam materi. Batas panjang kombinasi 2 atau 3 diterapkan untuk mencegah aplikasi kehabisan memori; karena itu jumlah aturan mungkin berbeda dari pengolahan tanpa batas di R.')
+
+
+def render_content():
+    hero('AKTIVITAS 03 · CONTENT-BASED', 'Content-Based Recommendation', 'Rekomendasi berdasarkan kemiripan deskripsi lima film menggunakan TF-IDF dan cosine similarity.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
+    st.caption('Default: lima film contoh yang ditulis langsung dalam notebook Content_Based_Recommendation.ipynb.')
+    up=st.file_uploader('Opsional: unggah CSV dengan kolom Judul dan Deskripsi',type=['csv'],key='up_cb')
+    df=pd.read_csv(up) if up else EXAMPLE_CONTENT.copy()
+    if not {'Judul','Deskripsi'}.issubset(df.columns): st.error('CSV memerlukan kolom Judul dan Deskripsi.');return
+    df=df[['Judul','Deskripsi']].dropna().drop_duplicates(subset=['Judul']).reset_index(drop=True)
+    if len(df)<2: st.warning('Setidaknya diperlukan 2 judul film.');return
+    try:
+        matrix=TfidfVectorizer(stop_words='english').fit_transform(df['Deskripsi'].astype(str))
+        similarity=cosine_similarity(matrix)
+    except ValueError as e:st.error(f'Deskripsi belum bisa diolah: {e}');return
+    left,right=st.columns([2,1])
+    with left: title=st.selectbox('Pilih film yang disukai',df.Judul)
+    with right: n=st.slider('Jumlah rekomendasi',1,min(len(df)-1,15),min(2,len(df)-1))
+    idx=df.index[df.Judul==title][0]
+    nearest=np.argsort(-similarity[idx],kind='stable')
+    nearest=[i for i in nearest if i!=idx][:n]
+    result=pd.DataFrame({'Film rekomendasi':df.loc[nearest,'Judul'].to_numpy(),'Kemiripan':similarity[idx,nearest]})
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
+    metrics([('Jumlah film',len(df)),('Istilah TF-IDF',matrix.shape[1]),('Rekomendasi',len(result))])
+    t1,t2,t3=st.tabs(['Rekomendasi','Matriks kemiripan','Data deskripsi'])
+    with t1:
+        st.caption('Jumlah rekomendasi mengatur **berapa film yang ditampilkan**, bukan '
+                   'mengubah skor kemiripan pasangan film yang sama. Ganti film acuan '
+                   'atau dataset untuk membandingkan skor yang berbeda.')
+        show_table(result,'content_based_rekomendasi.csv')
+        chart_layout(px.bar(result,x='Kemiripan',y='Film rekomendasi',orientation='h',title=f'Film mirip dengan {title}'))
+        if not result.empty:
+            row = choose_explanation_row(result, 'Film rekomendasi', 'detail_content_movies', 'Kemiripan')
+            film2 = str(row['Film rekomendasi'])
+            j = int(df.index[df.Judul == film2][0])
+            score = float(row['Kemiripan'])
+            common = sorted(set(re.findall(r'[a-zA-Z]{3,}', str(df.loc[idx, 'Deskripsi']).lower())) &
+                            set(re.findall(r'[a-zA-Z]{3,}', str(df.loc[j, 'Deskripsi']).lower())))
+            overlap = ', '.join(common[:8]) if common else 'tidak ada kata identik yang menonjol'
+            explain_result(
+                'kemiripan deskripsi film',
+                f'**{film2}** memperoleh skor **{score:.4f}** terhadap film acuan '
+                f'**{title}**. Semakin mendekati 1, representasi isi deskripsinya '
+                'semakin mirip; skor bukan rating atau persentase peluang suka.',
+                f'**Asal skor:** deskripsi tiap film diubah menjadi bobot kata menggunakan '
+                f'TF-IDF. Kemudian dihitung cosine similarity antara vektor film '
+                f'**{title}** dan **{film2}**.\n\n'
+                f'Karena vektor TF-IDF dinormalisasi otomatis ke panjang 1, '
+                f'hasil perkalian titik kedua vektor sama dengan cosine similarity '
+                f'= **{float(matrix[idx].multiply(matrix[j]).sum()):.4f}**.\n\n'
+                f'Contoh kata yang sama pada deskripsi mentah: **{overlap}**. '
+                'Namun skor sesungguhnya ditentukan oleh seluruh bobot TF-IDF, '
+                'bukan sekadar menghitung jumlah kata sama.'
+            )
+    with t2:
+        if len(df)<=30:
+            chart_layout(px.imshow(similarity,x=df.Judul.tolist(),y=df.Judul.tolist(),zmin=0,zmax=1,aspect='auto',title='Cosine similarity antarfilm'),height=390)
+        else: st.info('Matriks heatmap dibatasi untuk maksimal 30 film; rekomendasi tetap diproses.')
+        explain_result('matriks kemiripan',
+            f'Matriks membandingkan **{len(df)} film** dengan film lain. '
+            'Sel diagonal bernilai 1 karena membandingkan film dengan dirinya sendiri. '
+            'Warna sel menunjukkan besar-kecilnya kemiripan konten.',
+            'Baris menunjukkan film acuan dan kolom menunjukkan film pembanding. '
+            'Nilai diperoleh dari cosine similarity dua vektor TF-IDF. '
+            'Hasil A–B dan B–A sama (matriks simetris).')
+    with t3:
+        compact_dataframe(df,use_container_width=True,hide_index=True)
+        explain_result('data deskripsi',
+            f'Ada **{len(df)} judul unik** sesudah baris kosong dan judul duplikat dibuang. '
+            f'TF-IDF menghasilkan **{matrix.shape[1]} istilah** dari deskripsi yang tersedia.',
+            'Istilah TF-IDF adalah kata hasil proses vektorisasi, bukan jumlah film. '
+            'Kata umum bahasa Inggris dapat diabaikan oleh pengaturan stop_words.')
+    note('TF-IDF mengubah deskripsi menjadi representasi angka, lalu cosine similarity mengukur kedekatan konten. Skor tinggi berarti deskripsi lebih mirip, bukan jaminan film akan disukai pengguna.')
+
+
+def render_movie():
+    hero('AKTIVITAS 04 · CONTENT-BASED', 'Movie Recommendation (MovieLens)', 'Rekomendasi film berdasarkan kemiripan genre dari dataset Movie.zip yang digunakan dalam materi.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
+    up=st.file_uploader('Opsional: unggah CSV dengan kolom movieId, title, genres',type=['csv'],key='up_mov')
+    if up:
+        frame=pd.read_csv(up)
+        if not {'title','genres'}.issubset(frame.columns):st.error('CSV harus memiliki minimal kolom title dan genres.');return
+        frame=frame[frame.genres.fillna('(no genres listed)')!='(no genres listed)'].dropna(subset=['title','genres']).reset_index(drop=True)
+        frame['title_year']=frame.title.astype(str)
+        frame['year']=pd.to_numeric(frame.title.str.extract(r'\((\d{4})\)$')[0],errors='coerce')
+        frame['title_clean']=frame.title_year.str.replace(r'\s*\(\d{4}\)\s*$', '',regex=True)
+        vect=TfidfVectorizer(stop_words='english')
+        X=vect.fit_transform(frame.genres.astype(str).str.replace('|',' ',regex=False).str.replace('Sci-Fi','Scifi',regex=False).str.replace('Film-Noir','Noir',regex=False))
+    else:frame,X=prep_movies()
+    if len(frame)<2:st.warning('Data film tidak cukup.');return
+    title=st.selectbox('Pilih judul film (bisa diketik untuk mencari)',frame.title_year.tolist())
+    n=st.slider('Jumlah rekomendasi',3,20,10)
+    ix=int(frame.index[frame.title_year==title][0]); scores=linear_kernel(X[ix],X).ravel();scores[ix]=-1
+    top=np.argsort(-scores,kind='stable')[:n]
+    result=frame.loc[top,['title_year','genres','year']].copy()
+    result['Kesamaan genre']=scores[top]
+    result=result.rename(columns={'title_year':'Film rekomendasi','genres':'Genre','year':'Tahun'})
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
+    metrics([('Film valid',f'{len(frame):,}'),('Fitur genre TF-IDF',str(X.shape[1])),('Rekomendasi',len(result))])
+    tab1,tab2,tab3=st.tabs(['Rekomendasi film','Analisis genre','Dataset'])
+    with tab1:
+        st.caption('Jumlah rekomendasi hanya mengubah banyaknya film yang ditampilkan; '
+                   'kesamaan genre dua film tetap sama jika datanya tidak berubah.')
+        show_table(result,'movie_recommendations.csv')
+        chart_layout(px.bar(result.head(12),x='Kesamaan genre',y='Film rekomendasi',orientation='h',title=f'Film paling mirip dengan {title}'),height=400)
+        if not result.empty:
+            first=choose_explanation_row(result, 'Film rekomendasi', 'detail_movie_recommendations', 'Kesamaan genre')
+            srcgenres=set(str(frame.loc[ix,'genres']).split('|'))
+            recgenres=set(str(first['Genre']).split('|'))
+            shared=sorted(srcgenres & recgenres)
+            explain_result(
+                'kesamaan genre dari MovieLens',
+                f'**{first["Film rekomendasi"]}** mendapat skor kesamaan **{float(first["Kesamaan genre"]):.4f}** '
+                f'terhadap **{title}**. Nilai dihitung dari genre, bukan sinopsis atau rating penonton.',
+                f'**Film acuan:** {title} — {frame.loc[ix,"genres"]}.\n\n'
+                f'**Film pembanding:** {first["Film rekomendasi"]} — {first["Genre"]}.\n\n'
+                f'**Genre sama:** {", ".join(shared) if shared else "tidak ada genre berlabel sama"}.\n\n'
+                f'Genre dipecah menjadi kata, dibobotkan dengan TF-IDF, lalu '
+                f'dihitung kesamaan vektor menggunakan linear kernel pada vektor '
+                f'yang sudah ternormalisasi (setara cosine similarity) = '
+                f'**{float(first["Kesamaan genre"]):.4f}**. '
+                'Film diperingkat dari skor tertinggi, tanpa memasukkan film acuan itu sendiri.'
+            )
+    with tab2:
+        from collections import Counter
+        counts=Counter(g.strip() for val in frame.genres.dropna() for g in str(val).split('|') if g.strip())
+        top_genres=pd.DataFrame(counts.most_common(18),columns=['Genre','Jumlah film'])
+        chart_layout(px.bar(top_genres,x='Jumlah film',y='Genre',orientation='h',title='18 genre paling umum'))
+        compact_dataframe(top_genres,hide_index=True,use_container_width=True)
+        if not top_genres.empty:
+            g=top_genres.iloc[0]
+            explain_result(
+                'jumlah film per genre',
+                f'Genre **{g["Genre"]}** tercatat pada **{int(g["Jumlah film"]):,} dari '
+                f'{len(frame):,} film valid**. Satu film dapat masuk lebih dari satu genre, '
+                'sehingga jumlah seluruh batang bisa lebih besar daripada jumlah film.',
+                f'Jumlah genre dihitung dengan memisahkan kolom `genres` pada karakter `|`, '
+                f'lalu menghitung berapa film yang memuat nama genre tersebut. '
+                f'Proporsi genre {g["Genre"]} = {int(g["Jumlah film"]):,} ÷ '
+                f'{len(frame):,} = **{int(g["Jumlah film"])/len(frame):.1%}**.'
+            )
+    with tab3:
+        st.markdown('**Cari film dalam dataset MovieLens**')
+        st.caption('Ketik sebagian judul untuk mencari di seluruh katalog film. Data ini memuat judul, genre, dan tahun; bukan sinopsis cerita.')
+        search_title = st.text_input(
+            'Cari judul film',
+            placeholder='Contoh: Inception, Toy Story, Titanic',
+            key='movie_dataset_search',
+        ).strip()
+        # Pencarian berlaku untuk seluruh film valid, tidak hanya 200 baris awal.
+        dataset_view = frame[['title_year', 'genres', 'year']]
+        if search_title:
+            dataset_view = dataset_view[
+                dataset_view['title_year'].str.contains(search_title, case=False, regex=False, na=False)
+            ]
+        else:
+            st.caption(f'Film acuan saat ini: **{title}** | Genre: **{frame.loc[ix, "genres"]}**')
+
+        st.caption(f'**{len(dataset_view):,} film** cocok dengan pencarian.' if search_title
+                   else f'**{len(dataset_view):,} film** tersedia dalam dataset.')
+        if dataset_view.empty:
+            st.info('Judul tidak ditemukan. Coba gunakan sebagian kata dari judul film.')
+        else:
+            compact_dataframe(
+                dataset_view.head(50).rename(columns={
+                    'title_year': 'Judul film', 'genres': 'Genre', 'year': 'Tahun',
+                }),
+                hide_index=True, use_container_width=True,
+            )
+            if len(dataset_view) > 50:
+                st.caption('Menampilkan 50 hasil pertama. Ketik judul lebih spesifik untuk mempersempit hasil.')
+        st.caption('Rating.csv juga tersedia dari Movie.zip, tetapi notebook Content_Based_Filtering_ML menggunakan fitur genre dari movie.csv untuk metode ini.')
+        explain_result('jumlah film pada pencarian',
+            f'Hasil pencarian saat ini memuat **{len(dataset_view):,} film** dari '
+            f'**{len(frame):,} film valid**. Pencarian mencocokkan bagian judul, '
+            'bukan genre atau kata dalam sinopsis.',
+            'Jika kotak pencarian kosong, seluruh data film valid digunakan. '
+            'Jika ada teks, hanya baris yang judulnya mengandung teks tersebut yang dihitung. '
+            'Tabel visual dibatasi 50 hasil teratas agar tetap ringan.')
+    note('Untuk menghemat memori, dashboard menghitung kemiripan film yang dipilih terhadap semua film, bukan membangun matriks kemiripan penuh 9.000 × 9.000. Rumus cosine similarity tetap setara.')
+
+
+def render_user_cf():
+    hero('AKTIVITAS 05 · COLLABORATIVE FILTERING', 'User-Based Collaborative Filtering', 'Mencari tetangga pengguna paling mirip dari pola rating film yang dicontohkan berdasarkan materi.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
+    up=st.file_uploader('Opsional: unggah CSV dengan kolom Pengguna, Film, Rating',type=['csv'],key='up_ub')
+    df=pd.read_csv(up) if up else EXAMPLE_RATINGS.copy()
+    if not {'Pengguna','Film','Rating'}.issubset(df.columns):st.error('Butuh kolom Pengguna, Film, Rating.');return
+    df=df[['Pengguna','Film','Rating']].dropna()
+    df['Rating']=pd.to_numeric(df['Rating'],errors='coerce');df=df.dropna(subset=['Rating'])
+    if df.Pengguna.nunique()<2:st.warning('Dibutuhkan minimal dua pengguna.');return
+    matrix, sim=ratings_matrix(df)
+    left,right=st.columns(2)
+    with left: user=st.selectbox('Pilih pengguna',matrix.index)
+    with right: threshold=st.slider('Minimal rating dari pengguna serupa',1,5,4)
+    neighbours=sim[user].drop(user).sort_values(ascending=False)
+    nearest=neighbours.index[0]
+    unseen=(matrix.loc[user]==0)&(matrix.loc[nearest]>=threshold)
+    recommendations=pd.DataFrame({'Film':matrix.columns[unseen], 'Rating pengguna serupa':matrix.loc[nearest,unseen].values})
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
+    metrics([('Pengguna',df.Pengguna.nunique()),('Film',df.Film.nunique()),('Tetangga terdekat',nearest),('Kemiripan',f'{float(neighbours.iloc[0]):.3f}')])
+    t1,t2,t3=st.tabs(['Hasil rekomendasi','Kemiripan pengguna','Matriks rating'])
+    with t1:
+        st.write(f'Pengguna **{user}** paling mirip dengan **{nearest}**.')
+        st.caption('Ambang minimal rating **menyaring** film yang disarankan, '
+                   'tidak mengubah rating aslinya atau skor kemiripan antar pengguna.')
+        if len(recommendations):show_table(recommendations,'user_based_rekomendasi.csv')
+        else:st.info('Tidak ada film baru dengan rating tetangga yang memenuhi batas ini. Kondisi ini mungkin terjadi pada dataset contoh yang sangat kecil.')
+        if not recommendations.empty:
+            first=choose_explanation_row(recommendations, 'Film', 'detail_user_recommendations', 'Rating pengguna serupa')
+            explain_result(
+                'asal film yang direkomendasikan',
+                f'**{first["Film"]}** direkomendasikan untuk **{user}** karena **{user}** '
+                f'belum memberi rating, sedangkan pengguna paling mirip (**{nearest}**) '
+                f'memberikan rating **{float(first["Rating pengguna serupa"]):g}** '
+                f'(batas minimum **{threshold}**).',
+                f'Rating **{first["Rating pengguna serupa"]:g}** berasal langsung dari '
+                f'sel matriks pengguna **{nearest}** pada film **{first["Film"]}**. '
+                f'Rating pengguna target **{user}** pada film itu masih 0 di matriks '
+                '(artinya belum tercatat, bukan tidak suka). '
+                f'Film muncul karena sudah lolos batas rating **{threshold}** '
+                'dan berasal dari pengguna dengan cosine similarity terbesar.'
+            )
+        else:
+            n_new = int(((matrix.loc[user] == 0) & (matrix.loc[nearest] > 0)).sum())
+            n_pass = int(((matrix.loc[user] == 0) & (matrix.loc[nearest] >= threshold)).sum())
+            explain_result('mengapa rekomendasi kosong',
+                f'Pengguna terdekat **{nearest}** mempunyai **{n_new} film** yang belum '
+                f'dinilai **{user}** dan memiliki rating positif. Setelah menerapkan '
+                f'batas rating **{threshold}**, hanya **{n_pass} film** yang memenuhi syarat.',
+                'Algoritma di halaman ini hanya mengambil rekomendasi dari **satu pengguna '
+                'paling mirip**. Jika tidak ada film yang belum ditonton dan diberi rating '
+                'setidaknya sebesar batas pilihan, tabel rekomendasi kosong. '
+                'Ini bukan berarti algoritma gagal.')
+    with t2:
+        chart_layout(px.imshow(sim,x=sim.columns,y=sim.index,zmin=0,zmax=1,title='Cosine similarity antar pengguna'))
+        compact_dataframe(neighbours.rename('Skor kesamaan').reset_index().rename(columns={'index':'Pengguna lain'}),hide_index=True,use_container_width=True)
+        va=matrix.loc[user].to_numpy(dtype=float)
+        vb=matrix.loc[nearest].to_numpy(dtype=float)
+        dot=float(np.dot(va,vb))
+        norm_a=float(np.linalg.norm(va))
+        norm_b=float(np.linalg.norm(vb))
+        shared=int(((va != 0)&(vb != 0)).sum())
+        explain_result(
+            'kemiripan pengguna',
+            f'**{nearest}** adalah pengguna dengan skor cosine similarity tertinggi '
+            f'terhadap **{user}**: **{float(neighbours.iloc[0]):.4f}**. '
+            f'Kedua pengguna memiliki **{shared} film** dengan rating tercatat pada keduanya.',
+            f'Vektor rating mencakup semua **{matrix.shape[1]} film**. '
+            f'Nilai kosong diisi 0 untuk kebutuhan matriks.\n\n'
+            f'Perkalian titik = **{dot:.4f}**; panjang vektor {user} = **{norm_a:.4f}**; '
+            f'panjang vektor {nearest} = **{norm_b:.4f}**.\n\n'
+            f'**Cosine similarity** = {dot:.4f} ÷ ({norm_a:.4f} × {norm_b:.4f}) '
+            f'= **{float(neighbours.iloc[0]):.4f}** '
+            '(jika ada vektor seluruhnya nol, pustaka mengembalikan kemiripan 0).'
+        )
+    with t3:
+        compact_dataframe(matrix,use_container_width=True)
+        explain_result('matriks rating pengguna dan film',
+            f'Matriks berisi **{matrix.shape[0]} pengguna × {matrix.shape[1]} film**. '
+            'Baris menunjukkan pengguna, kolom menunjukkan film, dan angka adalah '
+            'rating yang diberikan. Nilai 0 berarti tidak ada rating yang tercatat.',
+            'Matriks dibuat dari kolom `Pengguna`, `Film`, dan `Rating` dengan '
+            'pivot_table. Jika ada lebih dari satu rating untuk pasangan pengguna–film, '
+            'pivot_table memakai rata-rata. Sel yang tidak punya catatan rating '
+            'diisi 0 khusus untuk perhitungan kemiripan, bukan untuk menyatakan dislike.')
+    note('Angka 0 pada matriks berarti <b>belum ada rating</b> (missing), bukan rating negatif. Penentuan rekomendasi mengikuti notebook: film yang belum dinilai pengguna target tetapi diberi rating tinggi oleh tetangga terdekat.')
+
+
+def render_item_cf():
+    hero('AKTIVITAS 06 · COLLABORATIVE FILTERING', 'Item-Based kNN (Book-Crossing)', 'Menemukan judul buku yang serupa dari pola rating pengguna menggunakan k-Nearest Neighbors dengan jarak cosine.')
+    section_heading("PENGATURAN ANALISIS", "Parameter dan Dataset", "Sesuaikan input sesuai kebutuhan sebelum mengeksplorasi hasil.")
+    st.caption('Dataset siap pakai telah diproses dari tiga CSV dalam BX-Users.zip menggunakan filter yang tercantum di materi.')
+    up=st.file_uploader('Opsional: unggah CSV siap olah dengan kolom userID, bookTitle, bookRating',type=['csv'],key='up_book')
+    if up:
+        df=pd.read_csv(up)
+        if not {'userID','bookTitle','bookRating'}.issubset(df.columns): st.error('CSV harus memiliki kolom userID, bookTitle, bookRating.');return
+        df=df[['userID','bookTitle','bookRating']].dropna()
+        df['bookRating']=pd.to_numeric(df.bookRating,errors='coerce')
+        df=df.dropna(subset=['bookRating']).drop_duplicates(['userID','bookTitle'])
+        pivot=df.pivot_table(index='bookTitle',columns='userID',values='bookRating',aggfunc='mean',fill_value=0)
+        sparse=csr_matrix(pivot.to_numpy(dtype=np.float32));model=NearestNeighbors(metric='cosine',algorithm='brute').fit(sparse)
     else:
-        st.info("Belum ada data kandidat. Silakan tambah kandidat melalui form di atas.")
+        df=book_interactions()
+        pivot,sparse,model=prep_books()
+    if len(pivot)<2:st.warning('Jumlah buku tidak cukup.');return
+    name=st.selectbox('Pilih buku yang dijadikan acuan',pivot.index.tolist(),index=min(25,len(pivot)-1))
+    n=st.slider('Jumlah rekomendasi',1,min(15,len(pivot)-1),min(5,len(pivot)-1))
+    index=int(pivot.index.get_loc(name))
+    dists,indices=model.kneighbors(sparse[index],n_neighbors=min(n+1,len(pivot)))
+    rec=[]
+    for j,d in zip(indices[0],dists[0]):
+        if j!=index: rec.append({'Buku rekomendasi':pivot.index[j],'Kemiripan (1 − jarak)':round(float(1-d),4),'Jarak cosine':round(float(d),4)})
+    result=pd.DataFrame(rec).head(n)
+    section_heading("HASIL ANALISIS", "Ringkasan Hasil", "Indikator utama berdasarkan parameter yang dipilih.")
+    metrics([('Interaksi setelah filter',f'{len(df):,}'),('Buku',f'{len(pivot):,}'),('Pengguna',f'{len(pivot.columns):,}'),('Rekomendasi',len(result))])
+    t1,t2,t3=st.tabs(['Rekomendasi buku','Pola rating','Proses filter data'])
+    with t1:
+        st.caption('Jumlah rekomendasi mengatur panjang daftar. Nilai kemiripan '
+                   'sepasang buku tidak berubah hanya karena jumlah daftar diperbesar.')
+        if len(result):
+            show_table(result,'item_based_buku.csv')
+            chart_layout(px.bar(result,x='Kemiripan (1 − jarak)',y='Buku rekomendasi',orientation='h',title=f'Buku yang mirip dengan {name[:65]}'),height=390)
+            first=choose_explanation_row(result, 'Buku rekomendasi', 'detail_item_books', 'Kemiripan (1 − jarak)')
+            book2=str(first['Buku rekomendasi'])
+            vector_a=pivot.loc[name].to_numpy(dtype=float)
+            vector_b=pivot.loc[book2].to_numpy(dtype=float)
+            dot=float(np.dot(vector_a,vector_b))
+            norm_a=float(np.linalg.norm(vector_a))
+            norm_b=float(np.linalg.norm(vector_b))
+            common_raters=int(np.sum((vector_a!=0)&(vector_b!=0)))
+            explain_result(
+                'kemiripan dan jarak buku',
+                f'**{book2}** terpilih karena pola ratingnya dekat dengan **{name}**. '
+                f'Jarak cosine = **{float(first["Jarak cosine"]):.4f}**, sehingga '
+                f'kemiripan = 1 − jarak = **{float(first["Kemiripan (1 − jarak)"]):.4f}**. '
+                'Semakin kecil jarak, semakin mirip vektor interaksi kedua buku.',
+                f'Buku pertama dan buku rekomendasi dibandingkan berdasarkan rating dari '
+                f'**{len(pivot.columns):,} kolom pengguna**, bukan berdasarkan isi buku.\n\n'
+                f'Pengguna dengan rating bukan nol pada **kedua** buku: **{common_raters}**.\n\n'
+                f'Perkalian titik vektor = **{dot:.4f}**; panjang vektor pertama '
+                f'= **{norm_a:.4f}**, panjang kedua = **{norm_b:.4f}**.\n\n'
+                f'**Cosine similarity** = dot ÷ (panjang pertama × panjang kedua) '
+                f'≈ **{float(first["Kemiripan (1 − jarak)"]):.4f}**.\n\n'
+                f'**Jarak cosine** = 1 − similarity = **{float(first["Jarak cosine"]):.4f}**. '
+                'Dua kolom ini menyajikan satu hubungan dari sudut pandang berbeda, '
+                'bukan dua model terpisah.'
+            )
+    with t2:
+        counts=df.bookRating.value_counts().sort_index().rename_axis('Rating').reset_index(name='Jumlah')
+        chart_layout(px.bar(counts,x='Rating',y='Jumlah',title='Distribusi rating buku'))
+        st.caption('Rating 0 berasal dari data Book-Crossing dan merepresentasikan rating implisit / tanpa penilaian numerik eksplisit.')
+        zero=int((df.bookRating==0).sum())
+        explicit=int((df.bookRating!=0).sum())
+        explain_result('distribusi rating buku',
+            f'Terdapat **{len(df):,} catatan interaksi**: **{zero:,} rating 0** '
+            f'dan **{explicit:,} rating bukan nol**. Angka 0 dalam sumber Book-Crossing '
+            'merupakan interaksi tanpa skor eksplisit; bukan penilaian buruk.',
+            f'Jumlah pada setiap batang dihitung dengan menghitung baris yang '
+            'memiliki nilai `bookRating` tersebut. Total frekuensi semua batang = '
+            f'**{len(df):,} baris**. Data rating inilah yang membentuk '
+            'matriks buku × pengguna untuk rekomendasi.')
+    with t3:
+        st.markdown('''**Mengikuti tahapan materi:**
+
+1. Memilih pengguna dengan setidaknya 200 interaksi rating pada data asli.
+2. Mempertahankan nilai rating yang muncul sedikitnya 100 kali (sesuai script).
+3. Menggabungkan data rating dan judul buku; memilih judul dengan setidaknya 50 interaksi rating.
+4. Menyaring pengguna dengan lokasi mengandung `usa` atau `canada`.
+5. Menghapus pasangan pengguna–judul yang duplikat, lalu membentuk matriks buku × pengguna untuk kNN cosine.
+
+**Catatan:** agar repo ringan, dashboard menyertakan data hasil penyaringan dari arsip sumber, bukan keseluruhan arsip mentah. Jumlah buku dapat berbeda bila CSV dibaca dengan kebijakan baris rusak yang berbeda.''')
+        explain_result('ukuran dataset setelah filter',
+            f'Dataset yang digunakan saat ini memuat **{len(df):,} interaksi** '
+            f'dari **{len(pivot.columns):,} pengguna** terhadap '
+            f'**{len(pivot):,} judul buku**.',
+            'Jumlah interaksi adalah banyaknya baris data rating setelah penyaringan; '
+            'jumlah pengguna dan judul merupakan banyaknya nilai unik pada data aktif. '
+            + ('CSV unggahan telah dianggap sebagai data siap olah; '
+               'filter penyaringan arsip asli **tidak dijalankan ulang** untuk unggahan.'
+               if up is not None else
+               'Data bawaan merupakan data yang telah disaring dari arsip Book-Crossing.'))
+    note('Jarak cosine yang lebih kecil berarti pola rating buku lebih mirip. Skor ini mengukur kemiripan berdasarkan interaksi, bukan kesamaan isi cerita buku.')
 
 
-elif menu == "Penilaian Interview":
-    section("INTERVIEW ASSESSMENT", "Penilaian Interview", "Catat hasil wawancara, tentukan skor kompetensi dengan rubrik yang konsisten, kemudian pilih keputusan akhir pewawancara.")
-    if not C:
-        st.info("Belum ada kandidat. Isi menu Data Kandidat terlebih dahulu.")
-    else:
-        cid = st.selectbox("Pilih peserta magang", sorted(C.keys()), format_func=lambda x: f"{C[x].get('nama', '')}  ·  {x}")
-        person = C[cid]
-        old = I.get(cid, {})
-        st.markdown(f"**{person.get('nama', '')}** · {person.get('kampus', '—')} · {person.get('prodi', '—')} · {person.get('bidang', '—')}")
-        st.caption("Skor baru dihitung jika seluruh tujuh aspek sudah dinilai. Pilihan 'Belum Dinilai' tidak dihitung sebagai nilai 0.")
-        if old and not old.get("batch"):
-            st.info("Data interview ini dibuat sebelum fitur batch tersedia. Pilih periode pembukaan magang saat memperbarui hasilnya.")
-        with st.form(f"interview_{cid}"):
-            prior_year, prior_number = parse_batch_code(old.get("batch"), (_date(old.get("tanggal")) or date.today()).year)
-            a, b, c = st.columns([1.2, 1, 1], gap="medium")
-            with a:
-                interview_date = st.date_input("Tanggal Interview", value=_date(old.get("tanggal")) or date.today(), format="DD/MM/YYYY")
-            with b:
-                batch_year = st.number_input("Tahun Pembukaan", min_value=2020, max_value=2100, value=prior_year, step=1)
-            with c:
-                batch_number = st.number_input("Batch ke-", min_value=1, max_value=50, value=prior_number, step=1)
-            interviewer = st.text_input("Pewawancara", value=old.get("pewawancara", ""))
-            st.caption(f"Periode saat ini: **{batch_label(make_batch_code(int(batch_year), int(batch_number)))}**. Batch mengikuti pembukaan magang, bukan otomatis dari tanggal interview.")
-            st.markdown("#### Nilai Kompetensi")
-            current_score = {}
-            left, right = st.columns(2, gap="large")
-            for i, (key, label, _) in enumerate(ASPEK):
-                with (left if i < 4 else right):
-                    val = old.get(key, 0)
-                    opts = [0, 1, 2, 3, 4, 5]
-                    current_score[key] = st.selectbox(
-                        f"{label} · Bobot {weights[key]:.0%}",
-                        options=opts,
-                        index=opts.index(val) if val in opts else 0,
-                        format_func=lambda x: "— Belum Dinilai —" if x == 0 else f"{x} / 5",
-                    )
-            st.divider()
-            st.markdown("#### Hasil Wawancara & Tindak Lanjut")
-            a, b = st.columns(2)
-            with a:
-                strength = st.text_area("Kelebihan / Kekuatan", value=old.get("kelebihan", ""), height=105)
-                final = _select("Keputusan Akhir Pewawancara", old.get("keputusan", "Menunggu"), DECISIONS)
-            with b:
-                needs_work = st.text_area("Hal yang Perlu Ditingkatkan", value=old.get("peningkatan", ""), height=105)
-            notes = st.text_area("Catatan / Tindak Lanjut", value=old.get("catatan", ""), height=115)
-            submitted = st.form_submit_button("💾 Simpan Hasil Interview", type="primary", use_container_width=True)
-        if submitted:
-            saved = {
-                "id": cid, "tanggal": interview_date.isoformat(), "batch": make_batch_code(batch_year, batch_number), "pewawancara": interviewer,
-                "keputusan": final, "kelebihan": strength, "peningkatan": needs_work, "catatan": notes,
-                **current_score,
-            }
-            try:
-                save_interview(saved)
-                I[cid] = saved
-                sc, recom = calculate(saved, weights, high, mid)
-                if sc is None:
-                    st.success(f"Draft wawancara untuk {batch_label(saved['batch'])} tersimpan di PostgreSQL. Lengkapi tujuh aspek penilaian untuk menampilkan skor dan ranking.")
-                else:
-                    st.success(f"Wawancara {batch_label(saved['batch'])} tersimpan di PostgreSQL · Skor: {sc:.1f}/100 · {recom}.")
-            except DatabaseOperationError as exc:
-                st.error(str(exc))
-        show = I.get(cid)
-        if show:
-            sc, recom = calculate(show, weights, high, mid)
-            with st.container(border=True):
-                st.markdown(f"**Hasil Penilaian Tersimpan** · {batch_label(show.get('batch'))}")
-                if sc is None:
-                    st.info("Masih berupa draft: tujuh aspek nilai belum lengkap.")
-                else:
-                    c1, c2 = st.columns(2)
-                    c1.metric("Skor Akhir", f"{sc:.1f} / 100")
-                    c2.metric("Rekomendasi Sistem", recom)
-                    st.caption(f"Ambang rekomendasi sesuai Excel: ≥{high:g} direkomendasikan, ≥{mid:g} dipertimbangkan, di bawahnya belum direkomendasikan. Keputusan akhir diisi pewawancara.")
-        with st.expander("Lihat contoh pertanyaan wawancara (sesuai template)"):
-            for q in questions:
-                st.markdown(f"**{q['no']}. {q['area']}** — {q['pertanyaan']}")
-                st.caption(f"Pendalaman: {q['pendalaman']} · Fokus: {q['dinilai']}")
-
-elif menu == "Summary & Ranking":
-    section("EVALUATION / ANALYTICS", "Summary & Ranking Kandidat", "Bandingkan hasil berdasarkan tahun dan batch pembukaan magang. Peringkat dihitung ulang dalam batch yang dipilih.")
-
-    # Every selection is a new ranking scope, not just a filtered global rank.
-    codes = sorted({str(row.get("batch") or "") for row in I.values()}, reverse=True)
-    if "" in codes:
-        codes.remove("")
-        codes.append("")  # Old unassigned records appear last.
-    options = [None, *codes]
-    selected_batch = st.selectbox(
-        "Filter Tahun & Batch Interview",
-        options=options,
-        format_func=lambda code: "Semua tahun & batch" if code is None else batch_label(code),
-        help="Pilih satu batch untuk melihat metrik, peringkat, grafik dan status peserta khusus periode tersebut.",
+def render_hybrid():
+    hero(
+        'AKTIVITAS 07 · HYBRID',
+        'Hybrid Recommendation System',
+        'Menggabungkan Content-Based Filtering (kemiripan genre film) dan '
+        'Collaborative Filtering (pola rating pengguna).'
     )
-    if selected_batch is not None:
-        st.caption(f"Menampilkan **{batch_label(selected_batch)}**. Kandidat yang belum diwawancarai belum mempunyai batch dan hanya muncul pada tampilan Semua tahun & batch.")
+    section_heading(
+        'PENGATURAN ANALISIS', 'Parameter dan Dataset',
+        'Pilih pengguna dan tentukan seberapa besar pengaruh setiap metode terhadap rekomendasi.'
+    )
+    movies = EXAMPLE_HYBRID.copy()
+    ratings = EXAMPLE_RATINGS.rename(columns={'Pengguna':'User', 'Film':'Movie'}).copy()
 
-    scoped_ids = [cid for cid in C if selected_batch is None or
-                  (cid in I and (I[cid].get("batch") or "") == selected_batch)]
-    scoped_ranked = ranking_rows(C, I, weights, high, mid, batch_filter=selected_batch)
-    total = len(scoped_ids)
-    c1,c2,c3,c4 = st.columns(4, gap="medium")
-    with c1: metric_card("Total Kandidat",total,"Dalam periode terpilih","♙")
-    with c2: metric_card("Dinilai Lengkap",len(scoped_ranked),"Sudah masuk ranking","✓")
-    with c3: metric_card("Belum Lengkap",total-len(scoped_ranked),"Butuh tindak lanjut","◷")
-    with c4: metric_card("Skor Tertinggi",f"{scoped_ranked[0]['Skor']:.1f}" if scoped_ranked else "—","Nilai maksimum 100","✦")
+    left, right = st.columns(2)
+    with left:
+        target = st.selectbox('Pengguna target', sorted(ratings.User.unique()), index=1)
+    with right:
+        cb_weight = st.slider('Bobot Content-Based Filtering', 0.0, 1.0, 0.5, 0.05)
+    cf_weight = 1 - cb_weight
+    st.caption('Bobot **mengubah skor akhir gabungan**, tetapi film teratas belum tentu '
+               'berubah. Dataset contoh hanya memuat sedikit film dan rating; '
+               'pilih pengguna berbeda untuk melihat variasi kandidat.')
 
-    if scoped_ranked:
-        st.markdown('<div class="section-heading">Top Kandidat</div>',unsafe_allow_html=True)
-        podium = []
-        for idx,r in enumerate(scoped_ranked[:3]):
-            medal = ["01 / TOP SCORE","02 / RUNNER UP","03 / TOP 3"][idx]
-            podium.append(f'<div class="podium-item"><div class="podium-rank">{medal}</div><div class="podium-name">{html.escape(str(r["Nama Kandidat"]))}</div><div class="podium-meta">{html.escape(str(r["Perguruan Tinggi"]))} · {html.escape(str(r["Batch"]))}</div><div class="podium-score">{r["Skor"]:.1f}<span> / 100</span></div></div>')
-        st.markdown('<div class="podium">'+''.join(podium)+'</div>',unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Perbandingan Skor</div>',unsafe_allow_html=True)
-        plot = [{"Nama":r["Nama Kandidat"],"Skor":r["Skor"],"Rekomendasi":r["Rekomendasi"], "Batch":r["Batch"]} for r in scoped_ranked[:12]]
-        palette = alt.Scale(domain=["Direkomendasikan","Dipertimbangkan","Belum Direkomendasikan"], range=["#315fd4","#e0a23a","#e77e85"])
-        chart = (alt.Chart(alt.Data(values=plot)).mark_bar(cornerRadiusEnd=6,size=20)
-            .encode(x=alt.X("Skor:Q",scale=alt.Scale(domain=[0,100]),title="Nilai / 100"),
-                    y=alt.Y("Nama:N",sort="-x",title=None),
-                    color=alt.Color("Rekomendasi:N",scale=palette,legend=alt.Legend(orient="bottom")),
-                    tooltip=[alt.Tooltip("Nama:N"),alt.Tooltip("Skor:Q",format=".1f"),"Rekomendasi:N", "Batch:N"])
-            .properties(height=max(220,len(plot)*36),background="#ffffff").configure_view(stroke=None)
-            .configure_axis(labelColor="#5c6e86",titleColor="#5c6e86",gridColor="#eaf0f6"))
-        with st.container(border=True):
-            st.altair_chart(chart,use_container_width=True)
-        st.markdown('<div class="section-heading">Tabel Peringkat Lengkap</div>',unsafe_allow_html=True)
-        f1,f2 = st.columns(2)
-        with f1:
-            cats=["Semua","Direkomendasikan","Dipertimbangkan","Belum Direkomendasikan"]
-            reco_filter=st.selectbox("Filter rekomendasi",cats)
-        with f2:
-            positions=sorted({str(r["Posisi Magang"]) for r in scoped_ranked if str(r["Posisi Magang"]).strip()})
-            pos_filter=st.selectbox("Filter posisi magang",["Semua",*positions])
-        filtered=[r for r in scoped_ranked if (reco_filter=="Semua" or r["Rekomendasi"]==reco_filter) and (pos_filter=="Semua" or r["Posisi Magang"]==pos_filter)]
-        keys=["Ranking","Batch","ID","Nama Kandidat","Perguruan Tinggi","Program Studi","Posisi Magang","IPK","Skor","Rekomendasi","Keputusan Akhir"]
-        st.dataframe([{k:r[k] for k in keys} for r in filtered],use_container_width=True,hide_index=True,
-                     column_config={"Skor":st.column_config.ProgressColumn("Skor",min_value=0,max_value=100,format="%.1f")})
-        st.caption("Saat satu batch dipilih, peringkat dihitung ulang khusus peserta batch tersebut. Skor sama mendapatkan peringkat sama. Keputusan akhir ditetapkan pewawancara.")
-        if filtered:
-            stream=StringIO()
-            writer=csv.DictWriter(stream,fieldnames=keys)
-            writer.writeheader()
-            for r in filtered: writer.writerow({k:r[k] for k in keys})
-            st.download_button("⬇  Download Ranking (CSV)",stream.getvalue().encode("utf-8-sig"),file_name=f"ranking_magang_{selected_batch or 'semua_batch'}.csv",mime="text/csv")
-    else:
-        blank_state("Belum ada peserta dengan tujuh aspek nilai lengkap untuk batch yang dipilih.")
+    # Pertahankan algoritma dan dataset dari app.py asli. Tidak ada perubahan model.
+    tfidf = TfidfVectorizer()
+    X = tfidf.fit_transform(movies.Genre)
+    item_sim = pd.DataFrame(cosine_similarity(X), index=movies.Movie, columns=movies.Movie)
+    matrix = ratings.pivot_table(index='User', columns='Movie', values='Rating').fillna(0)
+    user_sim = pd.DataFrame(cosine_similarity(matrix), index=matrix.index, columns=matrix.index)
+    liked = ratings.loc[(ratings.User == target) & (ratings.Rating >= 4), 'Movie'].tolist()
+    rated = ratings.loc[ratings.User == target, 'Movie'].tolist()
+    candidate = [movie for movie in movies.Movie if movie not in rated]
 
-    st.divider()
-    st.markdown('<div class="section-heading">Status Seluruh Kandidat</div>',unsafe_allow_html=True)
-    progresses=[]
-    for cid in sorted(scoped_ids):
-        p=C[cid]
-        interview=I.get(cid)
-        sc,reco=calculate(interview,weights,high,mid)
-        filled=sum(1 for key,_,_ in ASPEK if interview and interview.get(key) in range(1,6))
-        progresses.append({"ID":cid,"Nama":p.get("nama",""),"Batch":batch_label((interview or {}).get("batch")), "Aspek Dinilai":filled,"Status":"Selesai" if sc is not None else ("Draft" if interview else "Belum Interview"),"Skor":sc,"Keputusan":(interview or {}).get("keputusan","—")})
-    if progresses:
-        st.dataframe(progresses,use_container_width=True,hide_index=True,
-                     column_config={"Aspek Dinilai":st.column_config.ProgressColumn("Aspek Dinilai",min_value=0,max_value=7,format="%d/7")})
-    else:
-        blank_state("Belum ada peserta pada periode ini. Pilih batch lain atau mulai wawancara melalui menu Penilaian Interview.")
+    scores = []
+    for movie in candidate:
+        cb = float(np.mean([item_sim.loc[movie, x] for x in liked])) if liked else 0.0
+        cf = 0.0
+        for other, sim in user_sim[target].drop(target).sort_values(ascending=False).items():
+            if movie in matrix.columns and matrix.loc[other, movie] > 0:
+                cf = float(matrix.loc[other, movie] * sim)
+                break
+        scores.append({
+            'Film': movie,
+            'Skor Content-Based': cb,
+            'Skor Collaborative Filtering': cf,
+        })
 
-elif menu == "Panduan & Rubrik":
-    section("ASSESSMENT GUIDELINES", "Panduan & Rubrik", "Referensi pewawancara: bobot kompetensi, skala nilai, dan pertanyaan yang digunakan secara konsisten untuk setiap peserta.")
-    st.subheader("Bobot dan Fokus Penilaian")
-    focus = [
-        "Menyampaikan gagasan secara jelas dan menjawab pertanyaan dengan runtut.",
-        "Alasan magang, tujuan belajar, dan pemahaman terhadap peran.",
-        "Dasar pengetahuan, keterampilan relevan, dan penerapannya.",
-        "Logika berpikir, analisis persoalan, dan pendekatan solusi.",
-        "Kolaborasi, tanggung jawab, dan komunikasi dalam tim.",
-        "Inisiatif, sikap terhadap umpan balik, dan adaptasi.",
-        "Etika, kedisiplinan, komitmen, dan kejelasan ketersediaan.",
-    ]
-    st.dataframe([{"Aspek": label, "Bobot": f"{weights[key]:.0%}", "Fokus": fokus} for (key, label, _), fokus in zip(ASPEK, focus)], hide_index=True, use_container_width=True)
-    st.caption(f"Skor akhir = Σ(nilai 1–5 × bobot) × 20. Direkomendasikan: ≥{high:g}; dipertimbangkan: ≥{mid:g}.")
-    st.subheader("Skala Penilaian 1–5")
-    st.dataframe([{"Nilai": x["nilai"], "Kategori": x["kategori"], "Panduan": x["panduan"]} for x in scale], hide_index=True, use_container_width=True)
-    st.subheader("12 Pertanyaan Panduan Interview")
-    for q in questions:
-        with st.expander(f"{q['no']}. {q['area']} — {q['pertanyaan']}"):
-            st.markdown(f"**Pertanyaan pendalaman:** {q['pendalaman']}")
-            st.markdown(f"**Hal yang dinilai:** {q['dinilai']}")
-    st.info("Gunakan pertanyaan inti yang seragam untuk menjaga konsistensi. Skor sistem adalah alat bantu, bukan keputusan akhir penerimaan peserta magang.")
+    score_df = pd.DataFrame(scores)
+    if not score_df.empty:
+        score_df[['Normalisasi Content-Based', 'Normalisasi Collaborative Filtering']] = (
+            MinMaxScaler().fit_transform(score_df[['Skor Content-Based', 'Skor Collaborative Filtering']])
+        )
+        score_df['Skor Akhir Hybrid'] = (
+            cb_weight * score_df['Normalisasi Content-Based']
+            + cf_weight * score_df['Normalisasi Collaborative Filtering']
+        )
+        score_df = score_df.sort_values('Skor Akhir Hybrid', ascending=False).reset_index(drop=True)
+
+    # Skor nol tetap dihitung dan tersedia sebagai kandidat, tetapi bukan hasil rekomendasi.
+    recommended_df = (score_df.loc[score_df['Skor Akhir Hybrid'] > 1e-10].copy()
+                      if not score_df.empty else score_df.copy())
+
+    section_heading('HASIL ANALISIS', 'Ringkasan Hasil',
+                    'Indikator utama berdasarkan parameter yang dipilih.')
+    metrics([
+        ('Pengguna', target),
+        ('Film kandidat', len(candidate)),
+        ('Film direkomendasikan', len(recommended_df)),
+    ])
+    metrics([
+        ('Bobot Content-Based Filtering', f'{cb_weight:.0%}'),
+        ('Bobot Collaborative Filtering', f'{cf_weight:.0%}'),
+    ])
+    explain_result(
+        'jumlah kandidat dan hasil Hybrid',
+        f'Pengguna **{target}** sudah memberi rating pada **{len(rated)} film**: '
+        f'{", ".join(rated)}. Tersisa **{len(candidate)} film kandidat** yang belum '
+        f'dinilai. Dari jumlah tersebut, **{len(recommended_df)} film** memiliki '
+        'skor akhir Hybrid positif dan ditampilkan sebagai rekomendasi.',
+        f'Film yang dianggap disukai adalah yang diberi rating minimal 4: '
+        f'**{", ".join(liked) if liked else "tidak ada"}**. '
+        'Film tersebut menjadi dasar perhitungan kemiripan Content-Based. '
+        'Collaborative Filtering menggunakan rating pengguna lain beserta '
+        'kemiripan mereka terhadap pengguna target. Kandidat dengan skor '
+        'akhir tepat nol tetap dihitung, tetapi tidak masuk daftar rekomendasi.'
+    )
+
+    tab_rekomendasi, tab_kontribusi, tab_rumus = st.tabs([
+        'Peringkat rekomendasi', 'Kontribusi metode', 'Data dan rumus'
+    ])
+    with tab_rekomendasi:
+        if score_df.empty:
+            st.info('Pengguna sudah memberi rating pada semua film; tidak ada kandidat baru.')
+        elif recommended_df.empty:
+            st.info('Belum ada film yang memperoleh Skor Akhir Hybrid di atas nol pada pengaturan ini.')
+            st.caption('Film kandidat dengan skor nol tetap dapat dilihat pada tab Data dan rumus.')
+        else:
+            st.caption('Hanya film dengan Skor Akhir Hybrid di atas nol yang ditampilkan sebagai rekomendasi. '
+                       'Kandidat dengan skor nol ada di tab Data dan rumus.')
+            tampil = recommended_df[[
+                'Film', 'Normalisasi Content-Based',
+                'Normalisasi Collaborative Filtering', 'Skor Akhir Hybrid'
+            ]].copy()
+            show_table(tampil, 'hybrid_rekomendasi.csv')
+            chart_layout(px.bar(
+                recommended_df, x='Skor Akhir Hybrid', y='Film', orientation='h',
+                title=f'Rekomendasi untuk {target}'
+            ))
+            unggulan = choose_explanation_row(recommended_df, 'Film', 'detail_hybrid_rank', 'Skor Akhir Hybrid')
+            st.markdown(
+                f"**Cara membaca hasil:** {unggulan['Film']} memiliki skor akhir "
+                f"**{unggulan['Skor Akhir Hybrid']:.4f}**. Skor ini adalah nilai gabungan "
+                'untuk mengurutkan rekomendasi, **bukan rating film dan bukan peluang dalam persen**.'
+            )
+            explain_result(
+                'peringkat rekomendasi Hybrid',
+                f'Film **{unggulan["Film"]}** memperoleh skor akhir '
+                f'**{unggulan["Skor Akhir Hybrid"]:.4f}** pada pilihan saat ini. '
+                'Urutan ditentukan oleh skor terbesar; film yang sedang dijelaskan '
+                'dipilih dari tabel hasil, sehingga tidak harus selalu film pertama.',
+                f'Skor untuk film teratas berasal dari **{cb_weight:.0%} × '
+                f'{unggulan["Normalisasi Content-Based"]:.4f}** '
+                f'(Content-Based) ditambah **{cf_weight:.0%} × '
+                f'{unggulan["Normalisasi Collaborative Filtering"]:.4f}** '
+                f'(Collaborative Filtering).\n\n'
+                f'= **{unggulan["Skor Akhir Hybrid"]:.4f}**. '
+                'Nilai 0–1 ini dipakai untuk pemeringkatan relatif di antara '
+                'kandidat, bukan probabilitas atau rating dalam skala 1–5.'
+            )
+        if recommended_df.empty and not score_df.empty:
+            explain_result('mengapa belum ada rekomendasi',
+                'Semua kandidat memiliki skor akhir nol pada bobot yang dipilih. '
+                'Karena halaman ini hanya menampilkan skor positif, daftar rekomendasi kosong.',
+                'Periksa tabel seluruh kandidat pada tab Data dan rumus. '
+                'Skor nol berarti tidak ada sinyal rekomendasi positif setelah '
+                'normalisasi dan pembobotan; bukan bukti bahwa film buruk.')
+
+    with tab_kontribusi:
+        if not recommended_df.empty:
+            kontribusi = recommended_df[[
+                'Film', 'Normalisasi Content-Based', 'Normalisasi Collaborative Filtering'
+            ]].melt(id_vars='Film', var_name='Metode', value_name='Skor normalisasi')
+            kontribusi['Metode'] = kontribusi['Metode'].replace({
+                'Normalisasi Content-Based': 'Content-Based Filtering',
+                'Normalisasi Collaborative Filtering': 'Collaborative Filtering',
+            })
+            chart_layout(px.bar(
+                kontribusi, x='Film', y='Skor normalisasi', color='Metode',
+                barmode='group', title='Skor tiap metode sebelum diberi bobot'
+            ))
+            st.caption('Grafik menampilkan skor yang sudah disamakan skalanya (0–1) '
+                       'sebelum dikalikan dengan bobot. Batang yang lebih tinggi '
+                       'menunjukkan nilai normalisasi yang lebih besar untuk metode tersebut.')
+            ex=choose_explanation_row(recommended_df, 'Film', 'detail_hybrid_contributions', 'Skor Akhir Hybrid')
+            explain_result(
+                'kontribusi kedua metode',
+                f'Untuk **{ex["Film"]}**, nilai normalisasi Content-Based adalah '
+                f'**{ex["Normalisasi Content-Based"]:.4f}**, sedangkan Collaborative '
+                f'Filtering **{ex["Normalisasi Collaborative Filtering"]:.4f}**. '
+                'Keduanya dibandingkan sebelum dikalikan bobot yang dipilih.',
+                f'Kontribusi sesudah bobot: Content-Based = {cb_weight:.2f} × '
+                f'{ex["Normalisasi Content-Based"]:.4f} '
+                f'= **{cb_weight*ex["Normalisasi Content-Based"]:.4f}**; '
+                f'Collaborative Filtering = {cf_weight:.2f} × '
+                f'{ex["Normalisasi Collaborative Filtering"]:.4f} '
+                f'= **{cf_weight*ex["Normalisasi Collaborative Filtering"]:.4f}**. '
+                'Penjumlahan dua kontribusi tersebut menghasilkan skor akhir Hybrid.'
+            )
+        else:
+            st.info('Tidak ada rekomendasi dengan skor positif untuk dibandingkan.')
+
+    with tab_rumus:
+        st.markdown('''#### Mengapa perlu normalisasi?
+
+Skor awal kedua metode **tidak menggunakan skala yang sama**. Skor Content-Based
+mengukur kemiripan genre, sedangkan skor Collaborative Filtering dihitung dari
+rating pengguna lain yang dikalikan dengan kemiripan antarpengguna. Jika kedua
+nilai langsung dijumlahkan, metode dengan angka lebih besar bisa terlalu mendominasi.
+
+**Normalisasi** mengubah setiap kelompok skor menjadi skala **0 sampai 1**,
+sehingga keduanya dapat digabungkan secara sebanding. Proses ini dilakukan
+**secara terpisah** untuk Content-Based Filtering dan Collaborative Filtering,
+berdasarkan film kandidat yang tersedia.
+
+`Nilai normalisasi = (skor awal − skor minimum) / (skor maksimum − skor minimum)`
+
+- **0** berarti skor paling rendah di antara kandidat pada metode tersebut.
+- **1** berarti skor paling tinggi di antara kandidat pada metode tersebut.
+- Nilai **1 tidak berarti 100% kemungkinan menyukai film**, dan nilai **0 tidak berarti film itu buruk**.
+
+Jika seluruh skor dalam satu metode sama, normalisasi pada contoh ini
+menghasilkan nol karena tidak ada perbedaan skor untuk dibandingkan.
+
+#### Bagaimana menghitung skor akhir Hybrid?
+
+`Skor Akhir Hybrid = (Bobot Content-Based Filtering × Normalisasi Content-Based) + (Bobot Collaborative Filtering × Normalisasi Collaborative Filtering)`
+
+Kedua bobot selalu berjumlah 100%. Semakin tinggi skor akhir, semakin tinggi
+peringkat film dalam rekomendasi **menurut model dan bobot yang dipilih**.
+Skor akhir bukan rating 1–5, persentase kecocokan, atau probabilitas.
+''')
+        if not score_df.empty:
+            unggulan = choose_explanation_row(score_df, 'Film', 'detail_hybrid_formula', 'Skor Akhir Hybrid')
+            nama = unggulan['Film']
+            mentah_konten = unggulan['Skor Content-Based']
+            mentah_kolaboratif = unggulan['Skor Collaborative Filtering']
+            normal_konten = unggulan['Normalisasi Content-Based']
+            normal_kolaboratif = unggulan['Normalisasi Collaborative Filtering']
+            total = unggulan['Skor Akhir Hybrid']
+            st.markdown(
+                f'**Perhitungan aktual film yang dipilih — {nama} untuk {target}:** '
+                f'Skor awal Content-Based **{mentah_konten:.4f}** menjadi **{normal_konten:.4f}** '
+                f'setelah normalisasi. Skor awal Collaborative Filtering '
+                f'**{mentah_kolaboratif:.4f}** menjadi **{normal_kolaboratif:.4f}** setelah normalisasi.'
+            )
+            st.markdown(
+                f'**Skor Akhir Hybrid** = ({cb_weight:.0%} × {normal_konten:.4f}) + '
+                f'({cf_weight:.0%} × {normal_kolaboratif:.4f}) = **{total:.4f}**.'
+            )
+        if not score_df.empty:
+            ex=unggulan  # Seluruh uraian di bawah mengikuti film yang sama dari pilihan di atas.
+            movie=str(ex['Film'])
+            content_values=[(x, float(item_sim.loc[movie,x])) for x in liked]
+            other_source=None
+            if movie in matrix.columns:
+                for other, similarity_value in user_sim[target].drop(target).sort_values(ascending=False).items():
+                    if matrix.loc[other,movie] > 0:
+                        other_source=(str(other), float(matrix.loc[other,movie]), float(similarity_value))
+                        break
+            cb_min=float(score_df['Skor Content-Based'].min())
+            cb_max=float(score_df['Skor Content-Based'].max())
+            cf_min=float(score_df['Skor Collaborative Filtering'].min())
+            cf_max=float(score_df['Skor Collaborative Filtering'].max())
+            if content_values:
+                cb_items='; '.join(f'{x}: {val:.4f}' for x,val in content_values)
+                cb_detail=(f'Kemiripan genre **{movie}** dengan film yang disukai: '
+                           f'{cb_items}. Rata-ratanya = **{float(ex["Skor Content-Based"]):.4f}**.')
+            else:
+                cb_detail='Tidak ada film dengan rating ≥ 4, sehingga skor Content-Based awal = 0.'
+            if other_source:
+                other, rating, similarity_value=other_source
+                cf_detail=(f'Pengguna lain pertama yang telah menilai **{movie}** '
+                           f'dalam urutan kemiripan adalah **{other}**. '
+                           f'Rating = **{rating:g}**, kemiripan terhadap {target} '
+                           f'= **{similarity_value:.4f}**; skor Collaborative awal '
+                           f'= {rating:g} × {similarity_value:.4f} '
+                           f'= **{float(ex["Skor Collaborative Filtering"]):.4f}**.')
+            else:
+                cf_detail=('Tidak ada pengguna lain dengan rating positif untuk film ini '
+                           'di matriks, sehingga skor Collaborative Filtering awal = 0.')
+            if cb_max!=cb_min:
+                normal_cb=(f'({float(ex["Skor Content-Based"]):.4f} − {cb_min:.4f}) '
+                           f'÷ ({cb_max:.4f} − {cb_min:.4f})')
+            else:
+                normal_cb='semua skor Content-Based sama → 0 oleh MinMaxScaler'
+            if cf_max!=cf_min:
+                normal_cf=(f'({float(ex["Skor Collaborative Filtering"]):.4f} − {cf_min:.4f}) '
+                           f'÷ ({cf_max:.4f} − {cf_min:.4f})')
+            else:
+                normal_cf='semua skor Collaborative Filtering sama → 0 oleh MinMaxScaler'
+            explain_result(
+                f'contoh perhitungan lengkap untuk {movie}',
+                f'Skor awal Content-Based **{float(ex["Skor Content-Based"]):.4f}** '
+                f'dan Collaborative Filtering **{float(ex["Skor Collaborative Filtering"]):.4f}** '
+                'dinormalisasi masing-masing, lalu dikalikan bobot dan dijumlahkan.',
+                f'**1. Dari mana skor Content-Based?**\n\n{cb_detail}\n\n'
+                f'**2. Dari mana skor Collaborative Filtering?**\n\n{cf_detail}\n\n'
+                f'**3. Normalisasi dari seluruh {len(score_df)} kandidat:**\n\n'
+                f'- Content-Based: minimum {cb_min:.4f}, maksimum {cb_max:.4f}. '
+                f'{normal_cb} = **{float(ex["Normalisasi Content-Based"]):.4f}**.\n'
+                f'- Collaborative Filtering: minimum {cf_min:.4f}, maksimum {cf_max:.4f}. '
+                f'{normal_cf} = **{float(ex["Normalisasi Collaborative Filtering"]):.4f}**.\n\n'
+                f'**4. Skor akhir pada bobot sekarang:**\n\n'
+                f'({cb_weight:.0%} × {float(ex["Normalisasi Content-Based"]):.4f}) + '
+                f'({cf_weight:.0%} × {float(ex["Normalisasi Collaborative Filtering"]):.4f}) '
+                f'= **{float(ex["Skor Akhir Hybrid"]):.4f}**.\n\n'
+                'Angka ini sesuai dengan baris film yang dipilih pada tabel kandidat '
+                '(nilai dan peringkat dihitung ulang saat pengguna atau bobot berubah).'
+            )
+        st.markdown('#### Seluruh film kandidat (termasuk skor nol)')
+        st.caption('Tabel berikut untuk memahami perhitungan. Film dengan skor nol '
+                   'tidak dimasukkan ke daftar peringkat rekomendasi.')
+        if not score_df.empty:
+            compact_dataframe(score_df, hide_index=True, use_container_width=True)
+        st.markdown('#### Dataset contoh yang dipakai')
+        with st.expander('Lihat data film dan rating pengguna (klik untuk buka/tutup)'):
+            st.markdown('**Data film**')
+            compact_dataframe(movies, hide_index=True, use_container_width=True)
+            st.markdown('**Data rating pengguna**')
+            compact_dataframe(ratings, hide_index=True, use_container_width=True)
+
+    note('Hybrid menggabungkan kemiripan genre dan pola rating pengguna. '
+         'Geser bobot untuk melihat perubahan peringkat rekomendasi. '
+         'Film dengan skor akhir nol tetap dihitung, tetapi tidak ditampilkan sebagai rekomendasi.')
+
+
+if page==NAV[0]: render_overview()
+elif page==NAV[1]: render_apriori()
+elif page==NAV[2]: render_groceries()
+elif page==NAV[3]: render_content()
+elif page==NAV[4]: render_movie()
+elif page==NAV[5]: render_user_cf()
+elif page==NAV[6]: render_item_cf()
+elif page==NAV[7]: render_hybrid()
